@@ -2,7 +2,7 @@ import numpy as np
 from selection.randomized.marginal_screening import BH
 from selection.tests.instance import gaussian_instance
 
-def test_selected_targets(n=500, p=100, signal_fac=1.6, s=5, sigma=3, rho=0.4, randomizer_scale=0.25,
+def test_selected_targets(n=500, p=100, signal_fac=1.8, s=5, sigma=3, rho=0.4, randomizer_scale=0.25,
                           full_dispersion=True):
     """
     Compare to R randomized lasso
@@ -30,7 +30,7 @@ def test_selected_targets(n=500, p=100, signal_fac=1.6, s=5, sigma=3, rho=0.4, r
     conv = BH.gaussian(X,
                        Y,
                        sigma = sigma_,
-                       randomizer_scale=randomizer_scale * sigma_)
+                       randomizer_scale= randomizer_scale * sigma_)
 
     boundary = conv.fit()
     nonzero = boundary != 0
@@ -42,7 +42,8 @@ def test_selected_targets(n=500, p=100, signal_fac=1.6, s=5, sigma=3, rho=0.4, r
 
     estimate, _, _, pval, intervals, _ = conv.selective_MLE(target="selected", dispersion=dispersion)
 
-    coverage = (beta[nonzero] > intervals[:, 0]) * (beta[nonzero] < intervals[:, 1])
+    beta_target = np.linalg.pinv(X[:, nonzero]).dot(X.dot(beta))
+    coverage = (beta_target > intervals[:, 0]) * (beta_target < intervals[:, 1])
     print("coverage for selected target", coverage.sum()/float(nonzero.sum()))
     return pval[beta[nonzero] == 0], pval[beta[nonzero] != 0], coverage, intervals
 

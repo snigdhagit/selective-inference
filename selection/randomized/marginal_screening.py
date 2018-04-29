@@ -25,6 +25,9 @@ def BH_selection(p_values, level):
 
     active = np.zeros(m, np.bool)
     active[E_sel] = 1
+
+    #print("check ordering", ((np.sort(p_values[np.sort(not_sel)])
+    #                          - ((order_sig+1 +np.arange(m-active.sum())+1) * level) /(2.* m))>=0.).sum()+ active.sum())
     return order_sig+1, active, np.argsort(p_values[np.sort(not_sel)])
 
 class BH():
@@ -68,28 +71,36 @@ class BH():
 
         self.boundary = np.fabs(randomized_score) > self.BH_cutoff
         self.interior = ~self.boundary
-        active_signs = np.sign(randomized_score[self.boundary])
-        signs = np.sign(randomized_score)
+        active_signs = np.sign(randomized_score)
 
-        self.selection_variable = {'sign': signs.copy(),
+        self.selection_variable = {'sign': active_signs.copy(),
                                    'variables': self.boundary.copy()}
 
         threshold = np.zeros(p)
         threshold[self.boundary] = self.BH_cutoff[self.boundary]
-        cut_off_vector = ndist.ppf(1. - ((K+np.arange(self.interior.sum())+1) * self.level) /(2.*p))
-        (threshold[self.interior])[sort_notsel_pvals] = (self.sigma_hat[self.interior])[sort_notsel_pvals] * cut_off_vector
+        cut_off_vector = ndist.ppf(1. - ((K+np.arange(self.interior.sum())+1) * self.level)/float(2.* p))
+
+        indices_interior = np.asarray([u for u in range(p) if self.interior[u]])
+        threshold[indices_interior[sort_notsel_pvals]] = (self.sigma_hat[self.interior])[sort_notsel_pvals] * cut_off_vector
+
         self.threshold = threshold
 
-        self.observed_opt_state = self._initial_omega[self.boundary] - self.observed_score[self.boundary] - \
-                                  np.diag(active_signs).dot(self.threshold[self.boundary])
+        self.observed_opt_state = np.diag(active_signs[self.boundary]).dot\
+                                      (self._initial_omega[self.boundary] - self.observed_score[self.boundary]) \
+                                  - self.threshold[self.boundary]
         self.num_opt_var = self.observed_opt_state.shape[0]
 
         opt_linear = np.zeros((p, self.num_opt_var))
-        opt_linear[self.boundary, :] = np.diag(active_signs)
+        opt_linear[self.boundary, :] = np.diag(active_signs[self.boundary])
         opt_offset = np.zeros(p)
-        opt_offset[self.boundary] = active_signs * self.threshold[self.boundary]
-        opt_offset[self.interior] = self._initial_omega[self.interior] - self.observed_score[self.interior]
+        opt_offset[self.boundary] = active_signs[self.boundary] * self.threshold[self.boundary]
+        opt_offset[self.interior] = randomized_score[self.interior]
         self.opt_transform = (opt_linear, opt_offset)
+
+        #print("check", (np.abs(opt_offset[self.interior]) < threshold[self.interior]).sum(), self.interior.sum())
+        print("KKT map summary ", np.allclose(self._initial_omega, self.observed_score + opt_linear.dot(self.observed_opt_state)
+                                     + opt_offset))
+        print("KKT map ", -self._initial_omega +  self.observed_score + opt_linear.dot(self.observed_opt_state)+ opt_offset)
 
         cov, prec = self.randomizer.cov_prec
         cond_precision = opt_linear.T.dot(opt_linear) * prec
