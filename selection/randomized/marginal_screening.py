@@ -19,16 +19,21 @@ def BH_selection(p_values, level):
     p_sorted = np.sort(p_values)
     indices = np.arange(m)
     indices_order = np.argsort(p_values)
-    order_sig = np.max(indices[p_sorted - np.true_divide(level * (np.arange(m) + 1.), m) <= 0])
-    E_sel = indices_order[:(order_sig+1)]
-    not_sel =indices_order[(order_sig+1):]
 
-    active = np.zeros(m, np.bool)
-    active[E_sel] = 1
+    active_bool = (p_sorted - np.true_divide(level * (np.arange(m) + 1.), m) <= 0)
+    if active_bool.sum() !=0:
+        order_sig = np.max(indices[p_sorted - np.true_divide(level * (np.arange(m) + 1.), m) <= 0])
+        E_sel = indices_order[:(order_sig + 1)]
+        not_sel = indices_order[(order_sig + 1):]
+        active = np.zeros(m, np.bool)
+        active[E_sel] = 1
 
-    #print("check ordering", ((np.sort(p_values[np.sort(not_sel)])
-    #                          - ((order_sig+1 +np.arange(m-active.sum())+1) * level) /(2.* m))>=0.).sum()+ active.sum())
-    return order_sig+1, active, np.argsort(p_values[np.sort(not_sel)])
+    else:
+        order_sig = -1
+        active = np.zeros(m, np.bool)
+        not_sel = indices_order[0:]
+
+    return order_sig + 1, active, np.argsort(p_values[np.sort(not_sel)])
 
 class BH():
 
@@ -199,74 +204,24 @@ class BH():
 
         return observed_target, cov_target * dispersion, crosscov_target_score.T * dispersion, alternatives
 
-    # def full_targets(self, features=None, dispersion=None):
-    #
-    #     if features is None:
-    #         features = self.boundary
-    #     features_bool = np.zeros(self.boundary.shape, np.bool)
-    #     features_bool[features] = True
-    #     features = features_bool
-    #
-    #     X, y = self.data
-    #     n, p = X.shape
-    #
-    #     # target is one-step estimator
-    #
-    #     Qfull = X.T.dot(self._W[:, None] * X)
-    #     G = self.loglike.smooth_objective(self.initial_soln, 'grad')
-    #     Qfull_inv = np.linalg.inv(Qfull)
-    #     one_step = self.initial_soln - Qfull_inv.dot(G)
-    #     cov_target = Qfull_inv[features][:, features]
-    #     observed_target = one_step[features]
-    #     crosscov_target_score = np.zeros((p, cov_target.shape[0]))
-    #     crosscov_target_score[features] = -np.identity(cov_target.shape[0])
-    #
-    #     if dispersion is None:  # use Pearson's X^2
-    #         dispersion = ((y - self.loglike.saturated_loss.mean_function(X.dot(one_step))) ** 2 / self._W).sum() / (
-    #         n - p)
-    #
-    #     alternatives = ['twosided'] * features.sum()
-    #     return observed_target, cov_target * dispersion, crosscov_target_score.T * dispersion, alternatives
-    #
-    # def debiased_targets(self,
-    #                      features=None,
-    #                      dispersion=None,
-    #                      debiasing_args={}):
-    #
-    #     if features is None:
-    #         features = self._overall
-    #     features_bool = np.zeros(self._overall.shape, np.bool)
-    #     features_bool[features] = True
-    #     features = features_bool
-    #
-    #     X, y = self.data
-    #     n, p = X.shape
-    #
-    #     # target is one-step estimator
-    #
-    #     G = self.loglike.smooth_objective(self.initial_soln, 'grad')
-    #     Qinv_hat = np.atleast_2d(debiasing_matrix(X * np.sqrt(self._W)[:, None],
-    #                                               np.nonzero(features)[0],
-    #                                               **debiasing_args)) / n
-    #     observed_target = self.initial_soln[features] - Qinv_hat.dot(G)
-    #     if p > n:
-    #         M1 = Qinv_hat.dot(X.T)
-    #         cov_target = (M1 * self._W[None, :]).dot(M1.T)
-    #         crosscov_target_score = -(M1 * self._W[None, :]).dot(X).T
-    #     else:
-    #         Qfull = X.T.dot(self._W[:, None] * X)
-    #         cov_target = Qinv_hat.dot(Qfull.dot(Qinv_hat.T))
-    #         crosscov_target_score = -Qinv_hat.dot(Qfull).T
-    #
-    #     if dispersion is None:  # use Pearson's X^2
-    #         Xfeat = X[:, features]
-    #         Qrelax = Xfeat.T.dot(self._W[:, None] * Xfeat)
-    #         relaxed_soln = self.initial_soln[features] - np.linalg.inv(Qrelax).dot(G[features])
-    #         dispersion = ((y - self.loglike.saturated_loss.mean_function(
-    #             Xfeat.dot(relaxed_soln))) ** 2 / self._W).sum() / (n - features.sum())
-    #
-    #     alternatives = ['twosided'] * features.sum()
-    #     return observed_target, cov_target * dispersion, crosscov_target_score.T * dispersion, alternatives
+    def full_targets(self, features=None, dispersion=None):
+
+        features = self.boundary
+
+        X, y = self.data
+        n, p = X.shape
+
+        # target is one-step estimator
+        Qfull = X.T.dot(X)
+        Qfull_inv = np.linalg.inv(Qfull)
+        one_step = Qfull_inv.dot(X.T.dot(y))
+        cov_target = Qfull_inv[features][:, features]
+        observed_target = one_step[features]
+        crosscov_target_score = np.zeros((p, cov_target.shape[0]))
+        crosscov_target_score[features] = -np.identity(cov_target.shape[0])
+
+        alternatives = ['twosided'] * features.sum()
+        return observed_target, cov_target * dispersion, crosscov_target_score.T * dispersion, alternatives
 
     @staticmethod
     def gaussian(X,
