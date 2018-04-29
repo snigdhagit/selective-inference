@@ -97,11 +97,6 @@ class BH():
         opt_offset[self.interior] = randomized_score[self.interior]
         self.opt_transform = (opt_linear, opt_offset)
 
-        #print("check", (np.abs(opt_offset[self.interior]) < threshold[self.interior]).sum(), self.interior.sum())
-        print("KKT map summary ", np.allclose(self._initial_omega, self.observed_score + opt_linear.dot(self.observed_opt_state)
-                                     + opt_offset))
-        print("KKT map ", -self._initial_omega +  self.observed_score + opt_linear.dot(self.observed_opt_state)+ opt_offset)
-
         cov, prec = self.randomizer.cov_prec
         cond_precision = opt_linear.T.dot(opt_linear) * prec
         cond_cov = np.linalg.inv(cond_precision)
