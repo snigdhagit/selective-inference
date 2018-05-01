@@ -26,7 +26,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     #snr_values = np.array([0.05, 0.10])
     for snr in snr_values:
 
-        output_overall = np.zeros(27)
+        output_overall = np.zeros(28)
 
         if target == "selected":
             for i in range(ndraw):
@@ -58,6 +58,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                                               "risk": output_overall[0],
                                               "coverage": output_overall[6],
                                               "length": output_overall[9],
+                                              "proportion_infinity": 0.,
                                               "power": output_overall[12],
                                               "fdr": output_overall[18],
                                               "power_post_BH": output_overall[15],
@@ -74,6 +75,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                                                  "risk": output_overall[2],
                                                  "coverage": 0.,
                                                  "length": 0.,
+                                                 "proportion_infinity": 0.,
                                                  "power": 0.,
                                                  "fdr": 0.,
                                                  "power_post_BH": 0.,
@@ -91,6 +93,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                                     "risk": output_overall[5],
                                     "coverage": output_overall[7],
                                     "length": output_overall[10],
+                                    "proportion_infinity": output_overall[27],
                                     "power": output_overall[13],
                                     "fdr": output_overall[19],
                                     "power_post_BH": output_overall[16],
@@ -107,6 +110,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                                      "risk": output_overall[5],
                                      "coverage": output_overall[8],
                                      "length": output_overall[11],
+                                     "proportion_infinity": 0.,
                                      "power": output_overall[14],
                                      "fdr": output_overall[20],
                                      "power_post_BH": output_overall[17],
@@ -134,10 +138,10 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
         df_master = df_master.append(metrics_unad, ignore_index=True)
         df_risk = df_risk.append(metrics, ignore_index=True)
 
-    outfile_metrics = os.path.join(outpath, "metrics_high_beta_type"+ str(beta_type) + "_"+ target + "_rho_"+ str(rho) +".csv")
-    outfile_risk = os.path.join(outpath, "risk_high_beta_type" + str(beta_type) + "_" + target +"_rho_"+ str(rho) + ".csv")
+    outfile_metrics = os.path.join(outpath, "metrics_beta_type"+ str(beta_type) + "_"+ target + "_rho_"+ str(rho) +".csv")
+    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_" + target +"_rho_"+ str(rho) + ".csv")
     df_master.to_csv(outfile_metrics, index=False)
     df_risk.to_csv(outfile_risk, index=False)
 
-write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results", n=200, p=1000, rho=0, s=10, beta_type=1,
+write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/results", n=200, p=1000, rho=0.35, s=10, beta_type=1,
             target="full", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.25), ndraw = 50)
