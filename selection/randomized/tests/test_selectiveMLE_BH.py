@@ -52,7 +52,7 @@ def test_selected_targets(n=500, p=100, signal_fac=1.1, s=5, sigma=3, rho=0.4, r
     if True:
         return pval[beta[nonzero] == 0], pval[beta[nonzero] != 0], coverage, intervals
 
-def test_full_targets(n=500, p=100, signal_fac=1.1, s=5, sigma=3, rho=0.4, randomizer_scale=0.25,
+def test_full_targets(n=500, p=100, signal_fac=1.1, s=5, sigma=3, rho=0.35, randomizer_scale=0.25,
                       full_dispersion=True):
     """
     Compare to R randomized lasso
@@ -84,7 +84,6 @@ def test_full_targets(n=500, p=100, signal_fac=1.1, s=5, sigma=3, rho=0.4, rando
 
     boundary = conv.fit()
     nonzero = boundary != 0
-    print("dimensions", n, p, nonzero.sum())
 
     dispersion = None
     if full_dispersion:
@@ -93,18 +92,20 @@ def test_full_targets(n=500, p=100, signal_fac=1.1, s=5, sigma=3, rho=0.4, rando
     estimate, _, _, pval, intervals, _ = conv.selective_MLE(target="full", dispersion=dispersion)
 
     coverage = (beta[nonzero] > intervals[:, 0]) * (beta[nonzero] < intervals[:, 1])
-    print("coverage for selected target", coverage.sum()/float(nonzero.sum()))
+
+    print("coverage for target", coverage.sum()/float(nonzero.sum()))
     return pval[beta[nonzero] == 0], pval[beta[nonzero] != 0], coverage, intervals
 
 def main(nsim=100):
 
-    P0, PA, cover, length_int = [], [], [], []
+    P0, PA, cover, length_int= [], [], [], []
     for i in range(nsim):
-        p0, pA, cover_, intervals = test_selected_targets()
+        p0, pA, cover_, intervals = test_full_targets()
 
         cover.extend(cover_)
+
         P0.extend(p0)
         PA.extend(pA)
-        print(np.mean(cover),'coverage so far')
+        print(np.mean(cover), 'coverage so far')
 
 main()
