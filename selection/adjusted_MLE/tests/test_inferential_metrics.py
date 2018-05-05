@@ -143,6 +143,11 @@ def relative_risk(est, truth, Sigma):
 
     return (est-truth).T.dot(Sigma).dot(est-truth)/truth.T.dot(Sigma).dot(truth)
 
+def partial_relative_risk(est, truth, Sigma, sel_bool):
+
+    return (est[sel_bool]-truth[sel_bool]).T.dot(Sigma[sel_bool, :][:, sel_bool]).dot(est[sel_bool]-truth[sel_bool])\
+           /truth.T.dot(Sigma).dot(truth)
+
 def coverage(intervals, pval, truth):
     if (truth!=0).sum()!=0:
         avg_power = np.mean(pval[truth != 0])
@@ -529,15 +534,16 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                 fdr_Lee_dis = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
                 fdr_unad_dis = (unad_discoveries * ~active_nonrand_bool).sum() / float(max(unad_discoveries.sum(), 1.))
 
+                print("zero", beta[nonzero].T.dot(Sigma[nonzero,:][:,nonzero]).dot(beta[nonzero]))
                 break
 
     if True:
-        return np.vstack((relative_risk(sel_MLE, beta, Sigma),
-                          relative_risk(ind_estimator, beta, Sigma),
-                          relative_risk(randomized_lasso.initial_soln , beta, Sigma),
-                          relative_risk(randomized_lasso._beta_full, beta, Sigma),
-                          relative_risk(rel_LASSO, beta, Sigma),
-                          relative_risk(est_LASSO, beta, Sigma),
+        return np.vstack((partial_relative_risk(sel_MLE, beta, Sigma, nonzero),
+                          partial_relative_risk(ind_estimator, beta, Sigma, nonzero),
+                          partial_relative_risk(randomized_lasso.initial_soln , beta, Sigma, nonzero),
+                          partial_relative_risk(randomized_lasso._beta_full, beta, Sigma, nonzero),
+                          partial_relative_risk(rel_LASSO, beta, Sigma, active_nonrand),
+                          partial_relative_risk(est_LASSO, beta, Sigma, active_nonrand),
                           cov_sel,
                           cov_Lee,
                           cov_unad,
@@ -770,9 +776,9 @@ if __name__ == "__main__":
         else:
             full_dispersion = False
         for i in range(ndraw):
-            output = comparison_risk_inference_full_alt(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                                        randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
-                                                        full_dispersion=full_dispersion)
+            output = comparison_risk_inference_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
+                                                    randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
+                                                    full_dispersion=full_dispersion)
             output_overall += np.squeeze(output)
 
             sys.stderr.write("overall selMLE risk " + str(output_overall[0] / float(i + 1)) + "\n")
