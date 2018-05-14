@@ -501,14 +501,15 @@ class affine_gaussian_sampler(optimization_sampler):
         conjugate_arg = prec_opt.dot(self.affine_con.mean)
 
         init_soln = feasible_point
+        ind_unbiased_estimator = observed_target + cov_target.dot(target_lin.T.dot(prec_opt.dot(self.affine_con.mean
+                                                                                                - feasible_point)))
         val, soln, hess = solve_barrier_nonneg(conjugate_arg,
                                                prec_opt,
                                                init_soln,
                                                **solve_args)
 
         final_estimator = observed_target + cov_target.dot(target_lin.T.dot(prec_opt.dot(self.affine_con.mean - soln)))
-        ind_unbiased_estimator = observed_target + cov_target.dot(target_lin.T.dot(prec_opt.dot(self.affine_con.mean
-                                                                                                - feasible_point)))
+
         L = target_lin.T.dot(prec_opt)
         observed_info_natural = prec_target + L.dot(target_lin) - L.dot(hess.dot(L.T))
         observed_info_mean = cov_target.dot(observed_info_natural.dot(cov_target))
@@ -734,5 +735,65 @@ def naive_pvalues(diag_cov, observed, parameter):
         pval = ndist.cdf((observed[j] - parameter[j])/sigma)
         pvalues[j] = 2 * min(pval, 1-pval)
     return pvalues
+
+def _solve_barrier_nonneg(conjugate_arg,
+                          precision,
+                          feasible_point=None,
+                          step=1,
+                          nstep=1000,
+                          tol=1.e-8):
+
+    scaling = np.sqrt(np.diag(precision))
+
+    if feasible_point is None:
+        feasible_point = 1. / scaling
+
+    objective = lambda u: -u.T.dot(conjugate_arg) + u.T.dot(precision).dot(u)/2. + np.log(1.+ 1./(u / scaling)).sum()
+    grad = lambda u: -conjugate_arg + precision.dot(u) + (1./(scaling + u) - 1./u)
+    barrier_hessian = lambda u: (-1./((scaling + u)**2.) + 1./(u**2.))
+
+    current = feasible_point
+    current_value = np.inf
+
+    for itercount in range(nstep):
+        newton_step = grad(current)
+
+        # make sure proposal is feasible
+
+        count = 0
+        while True:
+            count += 1
+            proposal = current - step * newton_step
+            if np.all(proposal > 0):
+                break
+            step *= 0.5
+            if count >= 40:
+                raise ValueError('not finding a feasible point')
+
+        # make sure proposal is a descent
+
+        count = 0
+        while True:
+            proposal = current - step * newton_step
+            proposed_value = objective(proposal)
+            if proposed_value <= current_value:
+                break
+            step *= 0.5
+
+        # stop if relative decrease is small
+
+        if np.fabs(current_value - proposed_value) < tol * np.fabs(current_value):
+            current = proposal
+            current_value = proposed_value
+            break
+
+        current = proposal
+        current_value = proposed_value
+
+        if itercount % 4 == 0:
+            step *= 2
+
+    hess = np.linalg.inv(precision + np.diag(barrier_hessian(current)))
+    return current_value, current, hess
 
 

@@ -13,6 +13,7 @@ from selection.adjusted_MLE.tests.test_inferential_metrics import (BHfilter,
                                                                    relative_risk,
                                                                    coverage,
                                                                    comparison_risk_inference_selected,
+                                                                   comparison_risk_inference_selected_alt,
                                                                    comparison_risk_inference_full)
 
 
@@ -22,18 +23,22 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     df_master = pd.DataFrame()
     df_risk = pd.DataFrame()
 
-    snr_values = np.array([0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22, 2.07])
-    #snr_values = np.array([0.05, 0.10])
+    snr_values = np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22])
+    #snr_values = np.array([0.05, 2.07])
     for snr in snr_values:
 
-        output_overall = np.zeros(28)
+        output_overall = np.zeros(29)
 
         if target == "selected":
+            if n > p:
+                full_dispersion = True
+            else:
+                full_dispersion = False
             for i in range(ndraw):
-                output = comparison_risk_inference_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
-                                                            snr=snr,randomizer_scale=randomizing_scale,
-                                                            target=target, tuning=tuning,
-                                                            full_dispersion=True)
+                output = comparison_risk_inference_selected_alt(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
+                                                                snr=snr,randomizer_scale=randomizing_scale,
+                                                                target=target, tuning=tuning,
+                                                                full_dispersion=full_dispersion)
                 output_overall += np.squeeze(output)
 
         elif target == "full":
@@ -138,10 +143,10 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
         df_master = df_master.append(metrics_unad, ignore_index=True)
         df_risk = df_risk.append(metrics, ignore_index=True)
 
-    outfile_metrics = os.path.join(outpath, "metrics_beta_type"+ str(beta_type) + "_"+ target + "_rho_"+ str(rho) +".csv")
-    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_" + target +"_rho_"+ str(rho) + ".csv")
+    outfile_metrics = os.path.join(outpath, "metrics_beta_type"+ str(beta_type) + "_high_" + target + "_rho_"+ str(rho) +".csv")
+    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_high_" + target +"_rho_"+ str(rho) + ".csv")
     df_master.to_csv(outfile_metrics, index=False)
     df_risk.to_csv(outfile_risk, index=False)
 
-write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/results", n=200, p=1000, rho=0.35, s=10, beta_type=1,
-            target="full", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.25), ndraw = 50)
+write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/new_estimator/", n=200, p=1000, rho=0.35, s=10, beta_type=1,
+            target="selected", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.25), ndraw = 50)
