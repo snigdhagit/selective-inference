@@ -6,7 +6,6 @@ rpy2.robjects.numpy2ri.activate()
 
 import selection.randomized.lasso as L; reload(L)
 from selection.randomized.lasso import highdim
-from selection.algorithms.lasso import lasso
 from scipy.stats import norm as ndist
 
 def BHfilter(pval, q=0.2):

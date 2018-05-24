@@ -55,7 +55,7 @@ def solve_barrier_nonneg(conjugate_arg,
                          feasible_point,
                          step=1,
                          max_iter=1000,
-         		 min_iter=50,
+         		         min_iter=50,
                          tol=1.e-8):
 
     gradient = np.zeros_like(conjugate_arg)
