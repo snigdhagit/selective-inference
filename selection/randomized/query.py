@@ -6,6 +6,8 @@ from scipy.optimize import bisect
 
 from regreg.affine import power_L
 
+from .selective_MLE_utils import solve_barrier_nonneg
+
 from ..distributions.api import discrete_family
 from ..sampling.langevin import projected_langevin
 from ..constraints.affine import sample_from_constraints
@@ -501,10 +503,10 @@ class affine_gaussian_sampler(optimization_sampler):
         init_soln = feasible_point
         ind_unbiased_estimator = observed_target + cov_target.dot(target_lin.T.dot(prec_opt.dot(self.affine_con.mean
                                                                                                 - feasible_point)))
-        val, soln, hess = _solve_barrier_nonneg(conjugate_arg,
-                                                prec_opt,
-                                                init_soln,
-                                                **solve_args)
+        val, soln, hess = solve_barrier_nonneg(conjugate_arg,
+                                               prec_opt,
+                                               init_soln,
+                                               **solve_args)
 
         final_estimator = observed_target + cov_target.dot(target_lin.T.dot(prec_opt.dot(self.affine_con.mean - soln)))
 
@@ -537,9 +539,9 @@ class affine_gaussian_sampler(optimization_sampler):
         conjugate_arg = prec_opt.dot(mean_param)
         init_soln = feasible_point
         val, soln, hess = _solve_barrier_nonneg(conjugate_arg,
-                                               prec_opt,
-                                               init_soln,
-                                               **solve_args)
+                                                prec_opt,
+                                                init_soln,
+                                                **solve_args)
 
         inter_map = cov_target.dot(target_lin.T.dot(prec_opt))
         param_map = theta + inter_map.dot(mean_param - soln)
