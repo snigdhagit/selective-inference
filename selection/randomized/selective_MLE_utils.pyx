@@ -7,7 +7,7 @@ ctypedef np.float_t DTYPE_float_t
 DTYPE_int = np.int
 ctypedef np.int_t DTYPE_int_t
 
-cdef extern from "randomized_lasso.h":
+cdef extern from "selective_mle.h":
 
     double barrier_solve(double *gradient,                   # Gradient vector
                          double *opt_variable,               # Optimization variable
@@ -55,7 +55,7 @@ def solve_barrier_nonneg(conjugate_arg,
                          feasible_point,
                          step=1,
                          max_iter=1000,
-         		 min_iter=50,
+         		         min_iter=50,
                          tol=1.e-8):
 
     gradient = np.zeros_like(conjugate_arg)
