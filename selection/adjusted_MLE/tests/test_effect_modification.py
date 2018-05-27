@@ -39,9 +39,11 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
     X -= X.mean(0)[None, :]
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
+    y= y.reshape((y.shape[0], ))
+    print("shape", y.shape)
 
     if full_dispersion:
-        dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
+        dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2. / (n - p)
         sigma_ = np.sqrt(dispersion)
     else:
         dispersion = None
@@ -56,7 +58,7 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
                                         lam_theory * np.ones(p),
                                         randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
 
-    signs = randomized_lasso.fit()
+    signs = randomized_lasso.fit(solve_args={'tol': 1.e-5, 'min_its': 100})
     nonzero = signs != 0
     sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 

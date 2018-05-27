@@ -71,7 +71,8 @@ def glmnet_lasso(X, y, lambda_val):
 
 def sim_xy(n, p, nval, rho=0, s=5, beta_type=2, snr=1):
     robjects.r('''
-    library(bestsubset)
+    #library(bestsubset)
+    source('~/best-subset/bestsubset/R/sim.R')
     sim_xy = bestsubset::sim.xy
     ''')
 
@@ -89,6 +90,7 @@ def sim_xy(n, p, nval, rho=0, s=5, beta_type=2, snr=1):
 
 def tuned_lasso(X, y, X_val,y_val):
     robjects.r('''
+        source('~/best-subset/bestsubset/R/lasso.R')
         tuned_lasso_estimator = function(X,Y,X.val,Y.val){
         Y = as.matrix(Y)
         X = as.matrix(X)
@@ -412,6 +414,7 @@ def comparison_risk_inference_selected_alt(n=500, p=100, nval=500, rho=0.35, s=5
         X_val /= (X_val.std(0)[None, :] * np.sqrt(n / (n - 1.)))
 
         y = y - y.mean()
+        print("check shape of y", y.shape)
         y_val = y_val - y_val.mean()
 
         if full_dispersion:
