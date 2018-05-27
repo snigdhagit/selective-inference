@@ -10,14 +10,16 @@ from scipy.stats import norm as ndist
 
 def glmnet_lasso(X, y, lambda_val):
     robjects.r('''
+                library('glmnet')
                 glmnet_LASSO = function(X,y,lambda){
                 y = as.matrix(y)
                 X = as.matrix(X)
                 lam = as.matrix(lambda)[1,1]
                 n = nrow(X)
-                fit = cv.glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
+                fit = glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
+                fit.cv = cv.glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
                 estimate = coef(fit, s=lam, exact=TRUE, x=X, y=y)[-1]
-                return(list(estimate = estimate, lam.min = fit$lambda.min, lam.1se = fit$lambda.1se))
+                return(list(estimate = estimate, lam.min = fit.cv$lambda.min, lam.1se = fit.cv$lambda.1se))
                 }''')
 
     lambda_R = robjects.globalenv['glmnet_LASSO']
@@ -30,7 +32,7 @@ def glmnet_lasso(X, y, lambda_val):
     lam_1se = np.array(lambda_R(r_X, r_y, r_lam).rx2('lam.1se'))
     return estimate, lam_min, lam_1se
 
-def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", full_dispersion = True):
+def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", full_dispersion = True, use_MLE=True):
 
     X = np.load("/Users/snigdhapanigrahi/Documents/Research/Effect_modification/predictors.npy")
     y = np.load("/Users/snigdhapanigrahi/Documents/Research/Effect_modification/response.npy")
@@ -40,7 +42,6 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
     y= y.reshape((y.shape[0], ))
-    print("shape", y.shape)
 
     if full_dispersion:
         dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2. / (n - p)
@@ -53,6 +54,13 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
     lam_theory = sigma_ * 1.1 * np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
     sys.stderr.write("lam theory " + str(lam_theory) + "\n" + "\n")
 
+    glm_LASSO_est, lam_min, lam_1se = glmnet_lasso(X, y, lam_theory/float(n))
+
+    sys.stderr.write("lam 1se " + str(lam_1se) + "\n" + "\n")
+
+    active_LASSO = (glm_LASSO_est != 0)
+    active_set = np.asarray([z for z in range(p) if active_LASSO[z]])
+
     randomized_lasso = highdim.gaussian(X,
                                         y,
                                         lam_theory * np.ones(p),
@@ -60,11 +68,20 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
 
     signs = randomized_lasso.fit(solve_args={'tol': 1.e-5, 'min_its': 100})
     nonzero = signs != 0
-    sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
+    active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
 
-    # estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(target=target,
-    #                                                                                                  dispersion=dispersion)
-    #
-    # print("selective intervals", sel_intervals)
+    sys.stderr.write("number of active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
+    sys.stderr.write("active variables selected by non-randomized LASSO " + str(active_set) + "\n" + "\n")
+    sys.stderr.write("active variables selected by randomized LASSO " + str(active_set_rand) + "\n" + "\n")
+
+
+    estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(target=target,
+                                                                                                     dispersion=dispersion)
+    sys.stderr.write("intervals based on MLE " + str(sel_intervals) + "\n" + "\n")
+    sys.stderr.write("pvals based on MLE " + str(sel_pval) + "\n" + "\n")
+
+    _, pval, intervals = randomized_lasso.summary(target=target, dispersion=sigma_, compute_intervals=True)
+    sys.stderr.write("intervals based on sampler " + str(intervals) + "\n" + "\n")
+    sys.stderr.write("pvals based on sampler " + str(pval) + "\n" + "\n")
 
 randomized_inference()
