@@ -7,6 +7,7 @@ rpy2.robjects.numpy2ri.activate()
 import selection.randomized.lasso as L; reload(L)
 from selection.randomized.lasso import highdim
 from scipy.stats import norm as ndist
+from selection.algorithms.lasso import lasso_full
 
 def BHfilter(pval, q=0.2):
     robjects.r.assign('pval', pval)
@@ -414,7 +415,6 @@ def comparison_risk_inference_selected_alt(n=500, p=100, nval=500, rho=0.35, s=5
         X_val /= (X_val.std(0)[None, :] * np.sqrt(n / (n - 1.)))
 
         y = y - y.mean()
-        print("check shape of y", y.shape)
         y_val = y_val - y_val.mean()
 
         if full_dispersion:
@@ -445,7 +445,7 @@ def comparison_risk_inference_selected_alt(n=500, p=100, nval=500, rho=0.35, s=5
                                         randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
                 signs = conv.fit()
                 nonzero = signs != 0
-                if tuning == "selective_MLE":
+                if tuning == "conv_selective_MLE":
                     estimate, _, _, _, _, _ = conv.selective_MLE(target=target, dispersion=dispersion)
                     full_estimate = np.zeros(p)
                     full_estimate[nonzero] = (1.-alpha_seq[m])*estimate + (alpha_seq[m]*conv.initial_soln[nonzero])
@@ -611,6 +611,12 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
         active_LASSO = (glm_LASSO != 0)
         nactive_LASSO = active_LASSO.sum()
 
+        if n>p:
+            lasso_Liu = lasso_full.gaussian(X, y, n * lam_tuned_lasso)
+            Lasso_soln_Liu = lasso_Liu.fit()
+            active_set_Liu = np.nonzero(Lasso_soln_Liu != 0)[0]
+            nactive_Liu = active_set_Liu.shape[0]
+
         tune_num = 50
         lam_seq = sigma_ * np.linspace(0.25, 2.75, num=tune_num) * \
                   np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
@@ -647,12 +653,18 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
         sys.stderr.write("recall glmnet at tuned lambda " + str((glm_LASSO != 0).sum()) + "\n")
         sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 
-        if nonzero.sum()>0 and nactive_nonrand>0 and nonzero.sum()<50:
+        if nonzero.sum()>0 and nactive_nonrand>0 and nonzero.sum()<50 and nactive_Liu>0:
             beta_target_rand = beta[nonzero]
             beta_target_nonrand_py = beta[active_LASSO]
             beta_target_nonrand = beta[active_nonrand]
+            beta_target_Liu = beta[active_set_Liu]
 
             Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_tuned_lasso, sigma_, Type=1, alpha=0.1)
+            df = lasso_Liu.summary(level=0.90, compute_intervals=True, dispersion=dispersion)
+            Liu_lower, Liu_upper, Liu_pval = np.asarray(df['lower_confidence']), \
+                                             np.asarray(df['upper_confidence']), \
+                                             np.asarray(df['pval'])
+            Liu_intervals = np.vstack((Liu_lower, Liu_upper)).T
 
             if (Lee_pval.shape[0] == beta_target_nonrand_py.shape[0]):
                 sel_MLE = np.zeros(p)
@@ -661,8 +673,6 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                 sel_MLE[nonzero] = estimate
                 ind_estimator = np.zeros(p)
                 ind_estimator[nonzero] = ind_unbiased_estimator
-
-                print("compare", estimate, ind_unbiased_estimator)
 
                 if Lee_pval.shape[0] != beta_target_nonrand_py.shape[0]:
                     break
@@ -690,9 +700,14 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                 active_LASSO_bool = np.zeros(nactive_LASSO, np.bool)
                 for z in range(nactive_LASSO):
                     active_LASSO_bool[z] = (np.in1d(active_set_LASSO[z], true_set).sum() > 0)
+                active_Liu_bool = np.zeros(nactive_Liu, np.bool)
+                for a in range(nactive_Liu):
+                    active_Liu_bool[a] = (np.in1d(active_set_Liu[a], true_set).sum() > 0)
 
                 cov_sel, _ = coverage(sel_intervals, sel_pval, beta_target_rand)
                 cov_Lee, _ = coverage(Lee_intervals, Lee_pval, beta_target_nonrand_py)
+                cov_Liu, _ = coverage(Liu_intervals, Liu_pval, beta_target_Liu)
+
                 inf_entries = np.isinf(Lee_intervals[:, 1] - Lee_intervals[:, 0])
                 if inf_entries.sum() == nactive_LASSO:
                     length_Lee = 0.
@@ -704,19 +719,24 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                                                                  (0. > sel_intervals[:, 1])))).sum()
                 power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]),
                                                                   (0. > Lee_intervals[:, 1])))).sum()
+                power_Liu = ((active_Liu_bool)  * (np.logical_or((0. < Liu_intervals[:, 0]),
+                                                                  (0. > Liu_intervals[:, 1])))).sum()
                 power_unad = ((active_nonrand_bool) * (np.logical_or((0. < unad_intervals[:, 0]),
                                                                      (0. > unad_intervals[:, 1])))).sum()
 
                 sel_discoveries = BHfilter(sel_pval, q=0.1)
                 Lee_discoveries = BHfilter(Lee_pval, q=0.1)
+                Liu_discoveries = BHfilter(Liu_pval, q=0.1)
                 unad_discoveries = BHfilter(unad_pval, q=0.1)
 
                 power_sel_dis = (sel_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
                 power_Lee_dis = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
+                power_Liu_dis = (Liu_discoveries * active_Liu_bool).sum() / float((beta != 0).sum())
                 power_unad_dis = (unad_discoveries * active_nonrand_bool).sum() / float((beta != 0).sum())
 
                 fdr_sel_dis = (sel_discoveries * ~active_rand_bool).sum() / float(max(sel_discoveries.sum(), 1.))
                 fdr_Lee_dis = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
+                fdr_Liu_dis = (Liu_discoveries * ~active_Liu_bool).sum() / float(max(Liu_discoveries.sum(), 1.))
                 fdr_unad_dis = (unad_discoveries * ~active_nonrand_bool).sum() / float(max(unad_discoveries.sum(), 1.))
 
                 break
@@ -730,24 +750,30 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                           relative_risk(est_LASSO, beta, Sigma),
                           cov_sel,
                           cov_Lee,
+                          cov_Liu,
                           cov_unad,
                           np.mean(sel_intervals[:, 1] - sel_intervals[:, 0]),
                           length_Lee,
+                          np.mean(Liu_intervals[:, 1] - Liu_intervals[:, 0]),
                           np.mean(unad_intervals[:, 1] - unad_intervals[:, 0]),
                           power_sel/float((beta != 0).sum()),
                           power_Lee/float((beta != 0).sum()),
+                          power_Liu/float((beta != 0).sum()),
                           power_unad/float((beta != 0).sum()),
                           power_sel_dis,
                           power_Lee_dis,
+                          power_Liu_dis,
                           power_unad_dis,
                           fdr_sel_dis,
                           fdr_Lee_dis,
+                          fdr_Liu_dis,
                           fdr_unad_dis,
                           nonzero.sum(),
                           nactive_LASSO,
                           nactive_nonrand,
                           sel_discoveries.sum(),
                           Lee_discoveries.sum(),
+                          Liu_discoveries.sum(),
                           unad_discoveries.sum(),
                           inf_entries.sum()/float(nactive_LASSO),
                           np.mean(estimate-beta_target_rand)))
@@ -755,13 +781,13 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
 if __name__ == "__main__":
 
     ndraw = 50
-    output_overall = np.zeros(29)
 
     target = "selected"
     tuning = "selective_MLE"
-    n, p, rho, s, beta_type, snr = 200, 1000, 0.35, 10, 1, 0.30
+    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.30
 
     if target == "selected":
+        output_overall = np.zeros(29)
         for i in range(ndraw):
             if n > p:
                 full_dispersion = True
@@ -769,7 +795,7 @@ if __name__ == "__main__":
                 full_dispersion = False
 
             output = comparison_risk_inference_selected_alt(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                                            randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
+                                                            randomizer_scale=np.sqrt(0.50), target=target, tuning= tuning,
                                                             full_dispersion=full_dispersion)
             output_overall += np.squeeze(output)
 
@@ -816,13 +842,14 @@ if __name__ == "__main__":
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")
 
     elif target == "full":
+        output_overall = np.zeros(35)
         if n > p:
             full_dispersion = True
         else:
             full_dispersion = False
         for i in range(ndraw):
             output = comparison_risk_inference_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                                    randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
+                                                    randomizer_scale=np.sqrt(0.5), target=target, tuning= tuning,
                                                     full_dispersion=full_dispersion)
             output_overall += np.squeeze(output)
 
@@ -837,34 +864,40 @@ if __name__ == "__main__":
 
             sys.stderr.write("overall selective coverage " + str(output_overall[6] / float(i + 1)) + "\n")
             sys.stderr.write("overall Lee coverage " + str(output_overall[7] / float(i + 1)) + "\n")
-            sys.stderr.write("overall unad coverage " + str(output_overall[8] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall Liu coverage " + str(output_overall[8] / float(i + 1)) + "\n")
+            sys.stderr.write("overall unad coverage " + str(output_overall[9] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("overall selective length " + str(output_overall[9] / float(i + 1)) + "\n")
-            sys.stderr.write("overall Lee length " + str(output_overall[10] / float(i + 1)) + "\n")
-            sys.stderr.write("proportion of Lee intervals that are infty " + str(output_overall[27] / float(i + 1)) + "\n")
-            sys.stderr.write("overall unad length " + str(output_overall[11] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall selective length " + str(output_overall[10] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Lee length " + str(output_overall[11] / float(i + 1)) + "\n")
+            sys.stderr.write("proportion of Lee intervals that are infty " + str(output_overall[33] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Liu length " + str(output_overall[12] / float(i + 1)) + "\n")
+            sys.stderr.write("overall unad length " + str(output_overall[13] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("overall selective power " + str(output_overall[12] / float(i + 1)) + "\n")
-            sys.stderr.write("overall Lee power " + str(output_overall[13] / float(i + 1)) + "\n")
-            sys.stderr.write("overall unad power " + str(output_overall[14] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall selective power " + str(output_overall[14] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Lee power " + str(output_overall[15] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Liu power " + str(output_overall[16] / float(i + 1)) + "\n")
+            sys.stderr.write("overall unad power " + str(output_overall[17] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("overall selective fdr " + str(output_overall[18] / float(i + 1)) + "\n")
-            sys.stderr.write("overall Lee fdr " + str(output_overall[19] / float(i + 1)) + "\n")
-            sys.stderr.write("overall unad fdr " + str(output_overall[20] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall selective fdr " + str(output_overall[22] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Lee fdr " + str(output_overall[23] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Liu fdr " + str(output_overall[24] / float(i + 1)) + "\n")
+            sys.stderr.write("overall unad fdr " + str(output_overall[25] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("overall selective power post BH " + str(output_overall[15] / float(i + 1)) + "\n")
-            sys.stderr.write("overall Lee power post BH  " + str(output_overall[16] / float(i + 1)) + "\n")
-            sys.stderr.write("overall unad power post BH " + str(output_overall[17] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall selective power post BH " + str(output_overall[18] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Lee power post BH  " + str(output_overall[19] / float(i + 1)) + "\n")
+            sys.stderr.write("overall Liu power post BH  " + str(output_overall[20] / float(i + 1)) + "\n")
+            sys.stderr.write("overall unad power post BH " + str(output_overall[21] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("average selective nactive " + str(output_overall[21] / float(i + 1)) + "\n")
-            sys.stderr.write("average Lee nactive  " + str(output_overall[22] / float(i + 1)) + "\n")
-            sys.stderr.write("average tuned LASSO nactive " + str(output_overall[23] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("average selective nactive " + str(output_overall[26] / float(i + 1)) + "\n")
+            sys.stderr.write("average Lee nactive  " + str(output_overall[27] / float(i + 1)) + "\n")
+            sys.stderr.write("average tuned LASSO nactive " + str(output_overall[28] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("average selective discoveries " + str(output_overall[24] / float(i + 1)) + "\n")
-            sys.stderr.write("average Lee discoveries " + str(output_overall[25] / float(i + 1)) + "\n")
-            sys.stderr.write("average tuned LASSO discoveries " + str(output_overall[26] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("average selective discoveries " + str(output_overall[29] / float(i + 1)) + "\n")
+            sys.stderr.write("average Lee discoveries " + str(output_overall[30] / float(i + 1)) + "\n")
+            sys.stderr.write("average Liu discoveries " + str(output_overall[31] / float(i + 1)) + "\n")
+            sys.stderr.write("average tuned LASSO discoveries " + str(output_overall[32] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("average bias " + str(output_overall[27] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("average bias " + str(output_overall[34] / float(i + 1)) + "\n" + "\n")
 
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")
 
