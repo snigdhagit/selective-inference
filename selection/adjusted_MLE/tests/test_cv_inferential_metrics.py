@@ -313,12 +313,64 @@ def comparison_risk_inference_selected_cv(n=500, p=100, nval=500, rho=0.35, s=5,
                           inf_entries.sum()/float(nactive_LASSO),
                           np.mean(estimate - beta_target_rand)))
 
+def risk_comparison_cv(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
+                       randomizer_scale=np.sqrt(0.25), target = "selected", full_dispersion = True):
+
+    X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+    true_mean = X.dot(beta)
+
+    X -= X.mean(0)[None, :]
+    X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
+    y = y - y.mean()
+
+    if full_dispersion:
+        dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
+        sigma_ = np.sqrt(dispersion)
+    else:
+        dispersion = None
+        sigma_ = np.std(y)
+
+    print("estimated and true sigma", sigma, sigma_)
+
+    glm_LASSO, lam_min, lam_1se = glmnet_lasso(X, y)
+    active_LASSO = (glm_LASSO != 0)
+    nactive_LASSO = active_LASSO.sum()
+    est_LASSO = glm_LASSO
+    rel_LASSO = np.zeros(p)
+    if nactive_LASSO > 0:
+        rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
+
+    randomized_lasso = highdim.gaussian(X,
+                                        y,
+                                        n * lam_1se * np.ones(p),
+                                        randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
+
+    signs = randomized_lasso.fit()
+    nonzero = signs != 0
+    sel_MLE = np.zeros(p)
+    ind_estimator = np.zeros(p)
+    if nonzero.sum()>0:
+        estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(target=target,                                                                                                         dispersion=dispersion)
+        sel_MLE[nonzero] = estimate
+        ind_estimator[nonzero] = ind_unbiased_estimator
+
+    sys.stderr.write("active variables selected by cv LASSO  " + str(nactive_LASSO) + "\n")
+    sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
+
+    return np.vstack((relative_risk(sel_MLE, beta, Sigma),
+                      relative_risk(ind_estimator, beta, Sigma),
+                      relative_risk(randomized_lasso.initial_soln, beta, Sigma),
+                      relative_risk(randomized_lasso._beta_full, beta, Sigma),
+                      relative_risk(rel_LASSO, beta, Sigma),
+                      relative_risk(est_LASSO, beta, Sigma)))
+
+
 if __name__ == "__main__":
 
     ndraw = 50
 
     target = "selected"
-    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 1.22
+    n, p, rho, s, beta_type, snr = 200, 1000, 0.35, 10, 1, 0.30
 
     if target == "selected":
         output_overall = np.zeros(35)
