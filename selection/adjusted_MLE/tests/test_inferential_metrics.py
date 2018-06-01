@@ -225,7 +225,6 @@ def Lee_selected_high(n=200, p=500, nval=200, rho=0.35, s=5, beta_type=2,
                           Lee_discoveries.sum(),
                           inf_entries.sum() / float(nactive_LASSO)))
 
-
 def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=2, snr=0.20,
                                        randomizer_scale=np.sqrt(0.25), target = "selected",
                                        tuning = "selective_MLE", full_dispersion = True):

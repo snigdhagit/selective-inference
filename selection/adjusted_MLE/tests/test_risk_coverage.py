@@ -16,7 +16,9 @@ from selection.adjusted_MLE.tests.test_inferential_metrics import (BHfilter,
                                                                    comparison_risk_inference_selected_alt,
                                                                    comparison_risk_inference_full)
 
-from selection.adjusted_MLE.tests.test_cv_inferential_metrics import comparison_risk_inference_selected_cv
+from selection.adjusted_MLE.tests.test_cv_inferential_metrics import (comparison_risk_inference_selected_cv,
+                                                                      comparison_risk_inference_full_cv,
+                                                                      comparison_risk_inference_selected_cv_alt_powerfdr)
 
 def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selected", tuning = "selective_MLE",
                 randomizing_scale= np.sqrt(0.50), CV= True, ndraw = 50):
@@ -24,8 +26,8 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     df_master = pd.DataFrame()
     df_risk = pd.DataFrame()
 
-    snr_values = np.array([0.05, 0.10, 0.12, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22])
-
+    snr_values = np.array([0.30, 0.42, 0.71, 1.22])
+#0.10, 0.15, 0.20, 0.25,
     for snr in snr_values:
 
         if target == "selected":
@@ -141,10 +143,9 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                 else:
                     full_dispersion = False
                 for i in range(ndraw):
-                    output = comparison_risk_inference_selected_alt(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
-                                                                    snr=snr, randomizer_scale=randomizing_scale,
-                                                                    target=target, tuning=tuning,
-                                                                    full_dispersion=full_dispersion)
+                    output = comparison_risk_inference_selected_cv_alt_powerfdr(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
+                                                                                snr=snr, randomizer_scale=randomizing_scale,
+                                                                                target=target, full_dispersion=full_dispersion)
                     output_overall += np.squeeze(output)
 
                 output_overall /= float(ndraw)
@@ -228,11 +229,17 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
             else:
                 full_dispersion = False
             for i in range(ndraw):
-                output = comparison_risk_inference_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
-                                                        snr=snr,
-                                                        randomizer_scale=randomizing_scale,
-                                                        target=target, tuning=tuning,
-                                                        full_dispersion=full_dispersion)
+                if CV is True:
+                    output = comparison_risk_inference_full_cv(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
+                                                               snr=snr,randomizer_scale=randomizing_scale,target=target,
+                                                               full_dispersion=full_dispersion)
+                else:
+                    output = comparison_risk_inference_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
+                                                            snr=snr,
+                                                            randomizer_scale=randomizing_scale,
+                                                            target=target, tuning=tuning,
+                                                            full_dispersion=full_dispersion)
+
                 output_overall += np.squeeze(output)
 
             output_overall /= float(ndraw)
@@ -342,10 +349,10 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
 
         df_risk = df_risk.append(metrics, ignore_index=True)
 
-    outfile_metrics = os.path.join(outpath, "metrics_beta_type_"+ str(beta_type) +  "_CV_" + target + "_rho_"+ str(rho) +".csv")
-    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_CV_" + target +"_rho_"+ str(rho) + ".csv")
+    outfile_metrics = os.path.join(outpath, "metrics_beta_type_"+ str(beta_type) +  "_CV0_" + target + "_rho_"+ str(rho) +".csv")
+    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_CV0_" + target +"_rho_"+ str(rho) + ".csv")
     df_master.to_csv(outfile_metrics, index=False)
     df_risk.to_csv(outfile_risk, index=False)
 
-write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/cross_validated/", n=500, p=100, rho=0.35, s=5, beta_type=1,
-            target="selected", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=True, ndraw = 50)
+write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/high_settings/cross_validated/", n=200, p=1000, rho=0.35, s=10, beta_type=1,
+            target="selected", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=False, ndraw = 50)

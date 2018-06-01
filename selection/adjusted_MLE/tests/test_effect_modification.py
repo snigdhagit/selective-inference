@@ -32,7 +32,7 @@ def glmnet_lasso(X, y, lambda_val):
     lam_1se = np.array(lambda_R(r_X, r_y, r_lam).rx2('lam.1se'))
     return estimate, lam_min, lam_1se
 
-def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", full_dispersion = True, use_MLE=True):
+def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", full_dispersion = True):
 
     X = np.load("/Users/snigdhapanigrahi/Documents/Research/Effect_modification/predictors.npy")
     y = np.load("/Users/snigdhapanigrahi/Documents/Research/Effect_modification/response.npy")
@@ -57,13 +57,14 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
     glm_LASSO_est, lam_min, lam_1se = glmnet_lasso(X, y, lam_theory/float(n))
 
     sys.stderr.write("lam 1se " + str(lam_1se) + "\n" + "\n")
+    sys.stderr.write("lam min " + str(lam_min) + "\n" + "\n")
 
     active_LASSO = (glm_LASSO_est != 0)
     active_set = np.asarray([z for z in range(p) if active_LASSO[z]])
 
     randomized_lasso = highdim.gaussian(X,
                                         y,
-                                        lam_theory * np.ones(p),
+                                        n* lam_min * np.ones(p),
                                         randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
 
     signs = randomized_lasso.fit(solve_args={'tol': 1.e-5, 'min_its': 100})
@@ -78,6 +79,7 @@ def randomized_inference(randomizer_scale = np.sqrt(0.25), target = "selected", 
     estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(target=target,
                                                                                                      dispersion=dispersion)
     sys.stderr.write("intervals based on MLE " + str(sel_intervals) + "\n" + "\n")
+    sys.stderr.write("selective MLE " + str(estimate) + "\n" + "\n")
     sys.stderr.write("pvals based on MLE " + str(sel_pval) + "\n" + "\n")
 
     _, pval, intervals = randomized_lasso.summary(target=target, dispersion=sigma_, compute_intervals=True)
