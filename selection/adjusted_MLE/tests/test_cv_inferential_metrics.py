@@ -59,7 +59,8 @@ def glmnet_lasso(X, y):
                 n = nrow(X)
                 fit.cv = cv.glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
                 estimate = coef(fit.cv, s='lambda.1se', exact=TRUE, x=X, y=y)[-1]
-                return(list(estimate = estimate, lam.min = fit.cv$lambda.min, lam.1se = fit.cv$lambda.1se))
+                estimate.min = coef(fit.cv, s='lambda.min', exact=TRUE, x=X, y=y)[-1]
+                return(list(estimate = estimate, estimate.min = estimate.min, lam.min = fit.cv$lambda.min, lam.1se = fit.cv$lambda.1se))
                 }''')
 
     lambda_R = robjects.globalenv['glmnet_LASSO']
@@ -67,9 +68,10 @@ def glmnet_lasso(X, y):
     r_X = robjects.r.matrix(X, nrow=n, ncol=p)
     r_y = robjects.r.matrix(y, nrow=n, ncol=1)
     estimate = np.array(lambda_R(r_X, r_y).rx2('estimate'))
+    estimate_min = np.array(lambda_R(r_X, r_y).rx2('estimate.min'))
     lam_min = np.asscalar(np.array(lambda_R(r_X, r_y).rx2('lam.min')))
     lam_1se = np.asscalar(np.array(lambda_R(r_X, r_y).rx2('lam.1se')))
-    return estimate, lam_min, lam_1se
+    return estimate, estimate_min, lam_min, lam_1se
 
 def relaxed_lasso(X, y):
     robjects.r('''
@@ -190,7 +192,7 @@ def comparison_risk_inference_selected_cv_alt_powerfdr(n=500, p=100, nval=500, r
 
     print("estimated and true sigma", sigma, sigma_)
 
-    glm_LASSO, lam_min, lam_1se = glmnet_lasso(X, y)
+    glm_LASSO, _, lam_min, lam_1se = glmnet_lasso(X, y)
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     nactive_nonrand = nactive_LASSO
@@ -388,7 +390,7 @@ def comparison_risk_inference_selected_cv(n=500, p=100, nval=500, rho=0.35, s=5,
 
         print("estimated and true sigma", sigma, sigma_)
 
-        glm_LASSO, lam_min, lam_1se = glmnet_lasso(X, y)
+        glm_LASSO, _, lam_min, lam_1se = glmnet_lasso(X, y)
         active_LASSO = (glm_LASSO != 0)
         nactive_LASSO = active_LASSO.sum()
 
@@ -546,7 +548,7 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
 
         print("estimated and true sigma", sigma, sigma_)
 
-        glm_LASSO, lam_min, lam_1se = glmnet_lasso(X, y)
+        glm_LASSO, _, lam_min, lam_1se = glmnet_lasso(X, y)
         active_LASSO = (glm_LASSO != 0)
         nactive_LASSO = active_LASSO.sum()
 
@@ -566,8 +568,7 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
         sys.stderr.write("active variables selected by cv LASSO  " + str(nactive_LASSO) + "\n")
         sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 
-        if nonzero.sum() > 0 and nactive_LASSO > 0 and nonzero.sum() < 50 and nactive_Liu > 0:
-
+        if nonzero.sum() > 0 and nonzero.sum() < 50 and nactive_LASSO>0 and nactive_Liu>0:
             est_LASSO = glm_LASSO
             rel_LASSO = np.zeros(p)
             rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
@@ -588,8 +589,9 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
 
             if (Lee_pval.shape[0] == beta_target_nonrand_py.shape[0]):
                 sel_MLE = np.zeros(p)
-                estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(target=target,
-                                                                                                                 dispersion=dispersion)
+                estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
+                    target=target,
+                    dispersion=dispersion)
                 sel_MLE[nonzero] = estimate
                 ind_estimator = np.zeros(p)
                 ind_estimator[nonzero] = ind_unbiased_estimator
@@ -598,7 +600,8 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
                     break
 
                 post_LASSO_OLS = np.linalg.pinv(X[:, active_nonrand]).dot(y)
-                unad_sd = sigma_ * np.sqrt(np.diag((np.linalg.inv(X[:, active_nonrand].T.dot(X[:, active_nonrand])))))
+                unad_sd = sigma_ * np.sqrt(
+                    np.diag((np.linalg.inv(X[:, active_nonrand].T.dot(X[:, active_nonrand])))))
 
                 unad_intervals = np.vstack([post_LASSO_OLS - 1.65 * unad_sd,
                                             post_LASSO_OLS + 1.65 * unad_sd]).T
@@ -657,7 +660,8 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
                 fdr_sel_dis = (sel_discoveries * ~active_rand_bool).sum() / float(max(sel_discoveries.sum(), 1.))
                 fdr_Lee_dis = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
                 fdr_Liu_dis = (Liu_discoveries * ~active_Liu_bool).sum() / float(max(Liu_discoveries.sum(), 1.))
-                fdr_unad_dis = (unad_discoveries * ~active_nonrand_bool).sum() / float(max(unad_discoveries.sum(), 1.))
+                fdr_unad_dis = (unad_discoveries * ~active_nonrand_bool).sum() / float(
+                    max(unad_discoveries.sum(), 1.))
 
                 break
 
@@ -701,72 +705,99 @@ def comparison_risk_inference_full_cv(n=500, p=100, nval=500, rho=0.35, s=5, bet
 def risk_comparison_cv(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
                        randomizer_scale=np.sqrt(0.25), target = "selected", full_dispersion = True):
 
-    while True:
-        X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
-        X -= X.mean(0)[None, :]
-        X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
-        y = y - y.mean()
+    X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+    X -= X.mean(0)[None, :]
+    X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
+    y = y - y.mean()
 
-        if full_dispersion:
-            dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
-            sigma_ = np.sqrt(dispersion)
-        else:
-            dispersion = None
-            sigma_ = np.std(y)
+    if full_dispersion:
+        dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
+        sigma_ = np.sqrt(dispersion)
+    else:
+        dispersion = None
+        sigma_ = np.std(y)
 
-        print("estimated and true sigma", sigma, sigma_)
+    print("estimated and true sigma", sigma, sigma_)
 
-        glm_LASSO, lam_min, lam_1se = glmnet_lasso(X, y)
-        active_LASSO = (glm_LASSO != 0)
-        nactive_LASSO = active_LASSO.sum()
-        est_LASSO = glm_LASSO
-        rel_LASSO = np.zeros(p)
-        if nactive_LASSO > 0:
-            rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
+    glm_LASSO, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y)
+    active_LASSO = (glm_LASSO != 0)
+    nactive_LASSO = active_LASSO.sum()
+    active_LASSO_min = (glm_LASSO_min != 0)
+    nactive_LASSO_min = active_LASSO_min.sum()
 
-        lam, alpha = relaxed_lasso(X, y)
+    est_LASSO = glm_LASSO
+    rel_LASSO = np.zeros(p)
+    est_LASSO_min = glm_LASSO_min
+    rel_LASSO_min = np.zeros(p)
 
-        sys.stderr.write("parameters from relaxed lasso: " + str(lam) + str(alpha) + "\n")
-        sys.stderr.write("parameters from cv glmnet: " + str(n * lam_1se) + "\n" + "\n")
+    if nactive_LASSO > 0:
+        rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
+    if nactive_LASSO_min > 0:
+        rel_LASSO_min[active_LASSO_min] = np.linalg.pinv(X[:, active_LASSO_min]).dot(y)
 
-        randomized_lasso = highdim.gaussian(X,
+    # lam, alpha = relaxed_lasso(X, y)
+
+    # sys.stderr.write("parameters from relaxed lasso: " + str(lam) + str(alpha) + "\n")
+    # sys.stderr.write("parameters from cv glmnet: " + str(n * lam_1se) + "\n" + "\n")
+
+    randomized_lasso = highdim.gaussian(X,
+                                        y,
+                                        n * lam_1se * np.ones(p),
+                                        randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
+
+    signs = randomized_lasso.fit()
+    nonzero = signs != 0
+    sel_MLE = np.zeros(p)
+    ind_estimator = np.zeros(p)
+
+    randomized_lasso_min = highdim.gaussian(X,
                                             y,
-                                            n * lam_1se * np.ones(p),
+                                            n * lam_min * np.ones(p),
                                             randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
 
-        signs = randomized_lasso.fit()
-        nonzero = signs != 0
-        sel_MLE = np.zeros(p)
-        ind_estimator = np.zeros(p)
-        cvx_combination_est = np.zeros(p)
-        sys.stderr.write("active variables selected by cv LASSO  " + str(nactive_LASSO) + "\n")
-        sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
+    signs_min = randomized_lasso_min.fit()
+    nonzero_min = signs_min != 0
 
-        if nonzero.sum() > 0 and nonzero.sum() < 50:
-            estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-                target=target,
-                dispersion=dispersion)
-            sel_MLE[nonzero] = estimate
-            ind_estimator[nonzero] = ind_unbiased_estimator
-            cvx_combination_est[nonzero] = alpha * randomized_lasso.initial_soln[nonzero] + (1. - alpha) * estimate
-            break
+    sel_MLE_min = np.zeros(p)
+    ind_estimator_min = np.zeros(p)
 
-    if True:
-        return np.vstack((relative_risk(cvx_combination_est, beta, Sigma),
-                          relative_risk(sel_MLE, beta, Sigma),
-                          relative_risk(ind_estimator, beta, Sigma),
-                          relative_risk(randomized_lasso.initial_soln, beta, Sigma),
-                          relative_risk(randomized_lasso._beta_full, beta, Sigma),
-                          relative_risk(rel_LASSO, beta, Sigma),
-                          relative_risk(est_LASSO, beta, Sigma),
-                          alpha))
+    sys.stderr.write("active variables selected by cv LASSO lam.1se " + str(nactive_LASSO) + "\n")
+    sys.stderr.write("active variables selected by cv LASSO lam.min " + str(nactive_LASSO_min) + "\n")
+    sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
+
+    if nonzero.sum() > 0 and nonzero.sum() < 50:
+        estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
+            target=target,
+            dispersion=dispersion)
+        sel_MLE[nonzero] = estimate
+        ind_estimator[nonzero] = ind_unbiased_estimator
+
+    if nonzero_min.sum() > 0 and nonzero_min.sum() < 50:
+        estimate_min, _, _, sel_pval_min, sel_intervals_min, ind_unbiased_estimator_min = randomized_lasso_min.selective_MLE(
+            target=target,
+            dispersion=dispersion)
+        sel_MLE_min[nonzero_min] = estimate_min
+        ind_estimator_min[nonzero_min] = ind_unbiased_estimator_min
+
+    return np.vstack((relative_risk(sel_MLE, beta, Sigma),
+                      relative_risk(ind_estimator, beta, Sigma),
+                      relative_risk(randomized_lasso.initial_soln, beta, Sigma),
+                      relative_risk(randomized_lasso._beta_full, beta, Sigma),
+                      relative_risk(rel_LASSO, beta, Sigma),
+                      relative_risk(est_LASSO, beta, Sigma),
+                      relative_risk(sel_MLE_min, beta, Sigma),
+                      relative_risk(ind_estimator_min, beta, Sigma),
+                      relative_risk(randomized_lasso_min.initial_soln, beta, Sigma),
+                      relative_risk(randomized_lasso_min._beta_full, beta, Sigma),
+                      relative_risk(rel_LASSO_min, beta, Sigma),
+                      relative_risk(est_LASSO_min, beta, Sigma)))
 
 # if __name__ == "__main__":
 #
 #     ndraw = 50
 #
 #     target = "full"
-#     n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.10
+#     n, p, rho, s, beta_type, snr = 300, 100, 0.35, 5, 1, 0.10
 #
 #     if target == "selected":
 #         output_overall = np.zeros(35)
@@ -839,8 +870,9 @@ def risk_comparison_cv(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0
 #             full_dispersion = False
 #         for i in range(ndraw):
 #             output = comparison_risk_inference_full_cv(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-#                                                        randomizer_scale=np.sqrt(0.5), target=target,
-#                                                        full_dispersion=full_dispersion)
+#                                                       randomizer_scale=np.sqrt(0.5), target=target,
+#                                                       full_dispersion=full_dispersion)
+#
 #             output_overall += np.squeeze(output)
 #
 #             sys.stderr.write("overall selMLE risk " + str(output_overall[0] / float(i + 1)) + "\n")
@@ -897,10 +929,10 @@ if __name__ == "__main__":
     ndraw = 50
 
     target = "selected"
-    n, p, rho, s, beta_type, snr = 200, 1000, 0.35, 10, 4, 0.20
+    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.30
 
     if target == "selected":
-        output_overall = np.zeros(8)
+        output_overall = np.zeros(12)
         for i in range(ndraw):
             if n > p:
                 full_dispersion = True
@@ -914,16 +946,22 @@ if __name__ == "__main__":
 
             output_overall += np.squeeze(output)
 
-            sys.stderr.write("overall cvx selMLE risk " + str(output_overall[0] / float(i + 1)) + "\n")
-            sys.stderr.write("overall selMLE risk " + str(output_overall[1] / float(i + 1)) + "\n")
-            sys.stderr.write("overall indep est risk " + str(output_overall[2] / float(i + 1)) + "\n")
-            sys.stderr.write("overall randomized LASSO est risk " + str(output_overall[3] / float(i + 1)) + "\n")
+            sys.stderr.write("overall selMLE risk at lam.1se " + str(output_overall[0] / float(i + 1)) + "\n")
+            sys.stderr.write("overall indep est risk at lam.1se " + str(output_overall[1] / float(i + 1)) + "\n")
+            sys.stderr.write("overall randomized LASSO est risk at lam.1se " + str(output_overall[2] / float(i + 1)) + "\n")
             sys.stderr.write(
-                "overall relaxed rand LASSO est risk " + str(output_overall[4] / float(i + 1)) + "\n" + "\n")
+                "overall relaxed rand LASSO est risk at lam.1se " + str(output_overall[3] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("overall relLASSO risk " + str(output_overall[5] / float(i + 1)) + "\n")
-            sys.stderr.write("overall LASSO risk " + str(output_overall[6] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall relLASSO risk at lam.1se " + str(output_overall[4] / float(i + 1)) + "\n")
+            sys.stderr.write("overall LASSO risk at lam.1se " + str(output_overall[5] / float(i + 1)) + "\n" + "\n")
 
-            sys.stderr.write("avg alpha " + str(output_overall[7] / float(i + 1)) + "\n" + "\n")
+            sys.stderr.write("overall selMLE risk at lam.min " + str(output_overall[6] / float(i + 1)) + "\n")
+            sys.stderr.write("overall indep est risk at lam.min " + str(output_overall[7] / float(i + 1)) + "\n")
+            sys.stderr.write("overall randomized LASSO est risk at lam.min " + str(output_overall[8] / float(i + 1)) + "\n")
+            sys.stderr.write(
+                "overall relaxed rand LASSO est risk at lam.min " + str(output_overall[9] / float(i + 1)) + "\n" + "\n")
+
+            sys.stderr.write("overall relLASSO risk at lam.min " + str(output_overall[10] / float(i + 1)) + "\n")
+            sys.stderr.write("overall LASSO risk at lam.min " + str(output_overall[11] / float(i + 1)) + "\n" + "\n")
 
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")

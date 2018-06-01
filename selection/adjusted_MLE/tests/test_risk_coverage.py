@@ -26,7 +26,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     df_master = pd.DataFrame()
     df_risk = pd.DataFrame()
 
-    snr_values = np.array([0.30, 0.42, 0.71, 1.22])
+    snr_values = np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22])
 #0.10, 0.15, 0.20, 0.25,
     for snr in snr_values:
 
@@ -349,10 +349,10 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
 
         df_risk = df_risk.append(metrics, ignore_index=True)
 
-    outfile_metrics = os.path.join(outpath, "metrics_beta_type_"+ str(beta_type) +  "_CV0_" + target + "_rho_"+ str(rho) +".csv")
-    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + "_CV0_" + target +"_rho_"+ str(rho) + ".csv")
+    outfile_metrics = os.path.join(outpath, "metrics_beta_type_"+ str(beta_type) + target + "_rho_"+ str(rho) +".csv")
+    outfile_risk = os.path.join(outpath, "risk_beta_type" + str(beta_type) + target +"_rho_"+ str(rho) + ".csv")
     df_master.to_csv(outfile_metrics, index=False)
     df_risk.to_csv(outfile_risk, index=False)
 
-write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/high_settings/cross_validated/", n=200, p=1000, rho=0.35, s=10, beta_type=1,
-            target="selected", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=False, ndraw = 50)
+write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/medium_settings/cross_validated_n300/", n=300, p=100, rho=0.35, s=5, beta_type=1,
+            target="full", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=True, ndraw = 50)
