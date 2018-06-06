@@ -17,8 +17,7 @@ from selection.adjusted_MLE.tests.test_inferential_metrics import (BHfilter,
                                                                    comparison_risk_inference_full)
 
 from selection.adjusted_MLE.tests.test_cv_inferential_metrics import (comparison_risk_inference_selected_cv,
-                                                                      comparison_risk_inference_full_cv,
-                                                                      comparison_risk_inference_selected_cv_alt_powerfdr)
+                                                                      comparison_risk_inference_full_cv)
 
 def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selected", tuning = "selective_MLE",
                 randomizing_scale= np.sqrt(0.50), CV= True, ndraw = 50):
@@ -27,7 +26,7 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     df_risk = pd.DataFrame()
 
     snr_values = np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22])
-#0.10, 0.15, 0.20, 0.25,
+
     for snr in snr_values:
 
         if target == "selected":
@@ -143,9 +142,10 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
                 else:
                     full_dispersion = False
                 for i in range(ndraw):
-                    output = comparison_risk_inference_selected_cv_alt_powerfdr(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type,
-                                                                                snr=snr, randomizer_scale=randomizing_scale,
-                                                                                target=target, full_dispersion=full_dispersion)
+                    output = comparison_risk_inference_full_cv(n=n, p=p, nval=n,
+                                                               rho=rho, s=s, beta_type=beta_type,
+                                                               snr=snr, randomizer_scale=randomizing_scale,
+                                                               target=target, full_dispersion=full_dispersion)
                     output_overall += np.squeeze(output)
 
                 output_overall /= float(ndraw)
@@ -354,5 +354,5 @@ def write_ouput(outpath, n=500, p=100, rho=0.35, s=5, beta_type=1, target="selec
     df_master.to_csv(outfile_metrics, index=False)
     df_risk.to_csv(outfile_risk, index=False)
 
-write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/medium_settings/cross_validated_n300/", n=300, p=100, rho=0.35, s=5, beta_type=1,
-            target="full", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=True, ndraw = 50)
+write_ouput("/Users/snigdhapanigrahi/adjusted_MLE/results/medium_settings/cross_validated_lammin_n500/", n=500, p=100, rho=0.35, s=5, beta_type=1,
+            target="selected", tuning = "selective_MLE", randomizing_scale= np.sqrt(0.50), CV=True, ndraw = 50)

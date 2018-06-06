@@ -900,38 +900,5 @@ if __name__ == "__main__":
 
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")
 
-# if __name__ == "__main__":
-#
-#     ndraw = 50
-#     output_overall = np.zeros(8)
-#
-#     target = "full"
-#     tuning = "selective_MLE"
-#     n, p, rho, s, beta_type, snr = 200, 1000, 0.35, 10, 1, 1.22
-#
-#     if n > p:
-#         full_dispersion = True
-#     else:
-#         full_dispersion = False
-#     for i in range(ndraw):
-#         output = Lee_selected_high(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-#                                    randomizer_scale=np.sqrt(0.25), target=target, tuning=tuning,
-#                                    full_dispersion=full_dispersion)
-#
-#         output_overall += np.squeeze(output)
-#
-#         sys.stderr.write("overall Lee coverage " + str(output_overall[0] / float(i + 1)) + "\n"+ "\n")
-#
-#         sys.stderr.write("overall Lee length " + str(output_overall[1] / float(i + 1)) + "\n")
-#         sys.stderr.write("proportion of Lee intervals that are infty " + str(output_overall[7] / float(i + 1)) + "\n"+ "\n")
-#
-#
-#         sys.stderr.write("overall Lee power " + str(output_overall[2] / float(i + 1)) + "\n")
-#         sys.stderr.write("overall Lee fdr " + str(output_overall[4] / float(i + 1)) + "\n")
-#         sys.stderr.write("overall Lee power post BH  " + str(output_overall[3] / float(i + 1)) + "\n"+ "\n")
-#
-#         sys.stderr.write("average Lee nactive  " + str(output_overall[5] / float(i + 1)) + "\n")
-#         sys.stderr.write("average Lee discoveries " + str(output_overall[6] / float(i + 1)) + "\n"+ "\n")
-#
-#         sys.stderr.write("iteration completed " + str(i + 1) + "\n")
+
 

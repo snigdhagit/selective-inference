@@ -8,6 +8,7 @@ import selection.randomized.lasso as L; reload(L)
 from selection.randomized.lasso import highdim
 from scipy.stats import norm as ndist
 from selection.algorithms.lasso import lasso_full
+from selection.tests.instance import gaussian_instance
 
 def BHfilter(pval, q=0.2):
     robjects.r.assign('pval', pval)
@@ -173,208 +174,26 @@ def coverage(intervals, pval, truth):
         avg_power = 0.
     return np.mean((truth > intervals[:, 0])*(truth < intervals[:, 1])), avg_power
 
-def comparison_risk_inference_selected_cv_alt_powerfdr(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=2, snr=0.20,
-                                                       randomizer_scale=np.sqrt(0.25), target = "selected",
-                                                       full_dispersion = True):
-    X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
-    true_mean = X.dot(beta)
-
-    X -= X.mean(0)[None, :]
-    X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
-    y = y - y.mean()
-
-    if full_dispersion:
-        dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
-        sigma_ = np.sqrt(dispersion)
-    else:
-        dispersion = None
-        sigma_ = np.std(y)
-
-    print("estimated and true sigma", sigma, sigma_)
-
-    glm_LASSO, _, lam_min, lam_1se = glmnet_lasso(X, y)
-    active_LASSO = (glm_LASSO != 0)
-    nactive_LASSO = active_LASSO.sum()
-    nactive_nonrand = nactive_LASSO
-
-    randomized_lasso = highdim.gaussian(X,
-                                        y,
-                                        n * lam_1se * np.ones(p),
-                                        randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
-
-    signs = randomized_lasso.fit()
-    nonzero = signs != 0
-
-    sys.stderr.write("active variables selected by cv LASSO  " + str(nactive_LASSO) + "\n")
-    sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
-
-    if nonzero.sum() > 0 and nactive_LASSO > 0:
-        beta_target_rand = np.linalg.pinv(X[:, nonzero]).dot(true_mean)
-        beta_target_nonrand = np.linalg.pinv(X[:, active_LASSO]).dot(true_mean)
-
-        est_LASSO = glm_LASSO
-        rel_LASSO = np.zeros(p)
-        rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
-        Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_1se, sigma_, Type=0, alpha=0.1)
-
-        if (Lee_pval.shape[0] == beta_target_nonrand.shape[0]):
-            sel_MLE = np.zeros(p)
-            estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-                target=target,
-                dispersion=dispersion)
-            sel_MLE[nonzero] = estimate
-            ind_estimator = np.zeros(p)
-            ind_estimator[nonzero] = ind_unbiased_estimator
-
-            post_LASSO_OLS = np.linalg.pinv(X[:, active_LASSO]).dot(y)
-            unad_sd = sigma_ * np.sqrt(np.diag((np.linalg.inv(X[:, active_LASSO].T.dot(X[:, active_LASSO])))))
-            unad_intervals = np.vstack([post_LASSO_OLS - 1.65 * unad_sd,
-                                        post_LASSO_OLS + 1.65 * unad_sd]).T
-            unad_pval = ndist.cdf(post_LASSO_OLS / unad_sd)
-
-            true_signals = np.zeros(p, np.bool)
-            true_signals[beta != 0] = 1
-            true_set = np.asarray([u for u in range(p) if true_signals[u]])
-            active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
-            active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
-
-            active_rand_bool = np.zeros(nonzero.sum(), np.bool)
-            for x in range(nonzero.sum()):
-                active_rand_bool[x] = (np.in1d(active_set_rand[x], true_set).sum() > 0)
-            active_LASSO_bool = np.zeros(nactive_LASSO, np.bool)
-            for z in range(nactive_LASSO):
-                active_LASSO_bool[z] = (np.in1d(active_set_LASSO[z], true_set).sum() > 0)
-
-            cov_sel, _ = coverage(sel_intervals, sel_pval, beta_target_rand)
-            cov_Lee, _ = coverage(Lee_intervals, Lee_pval, beta_target_nonrand)
-            inf_entries = np.isinf(Lee_intervals[:, 1] - Lee_intervals[:, 0])
-            if inf_entries.sum() == nactive_LASSO:
-                length_Lee = 0.
-            else:
-                length_Lee = np.mean((Lee_intervals[:, 1] - Lee_intervals[:, 0])[~inf_entries])
-            cov_unad, _ = coverage(unad_intervals, unad_pval, beta_target_nonrand)
-
-            power_sel = (
-                (active_rand_bool) * (np.logical_or((0. < sel_intervals[:, 0]), (0. > sel_intervals[:, 1])))).sum()
-            power_Lee = (
-                (active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()
-            power_unad = (
-                (active_LASSO_bool) * (
-                    np.logical_or((0. < unad_intervals[:, 0]), (0. > unad_intervals[:, 1])))).sum()
-
-            sel_discoveries = BHfilter(sel_pval, q=0.1)
-            Lee_discoveries = BHfilter(Lee_pval, q=0.1)
-            unad_discoveries = BHfilter(unad_pval, q=0.1)
-
-            power_sel_dis = (sel_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
-            power_Lee_dis = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
-            power_unad_dis = (unad_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
-
-            fdr_sel_dis = (sel_discoveries * ~active_rand_bool).sum() / float(max(sel_discoveries.sum(), 1.))
-            fdr_Lee_dis = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
-            fdr_unad_dis = (unad_discoveries * ~active_LASSO_bool).sum() / float(max(unad_discoveries.sum(), 1.))
-
-            return np.vstack((relative_risk(sel_MLE, beta, Sigma),
-                              relative_risk(ind_estimator, beta, Sigma),
-                              relative_risk(randomized_lasso.initial_soln, beta, Sigma),
-                              relative_risk(randomized_lasso._beta_full, beta, Sigma),
-                              relative_risk(rel_LASSO, beta, Sigma),
-                              relative_risk(est_LASSO, beta, Sigma),
-                              cov_sel,
-                              cov_Lee,
-                              cov_unad,
-                              np.mean(sel_intervals[:, 1] - sel_intervals[:, 0]),
-                              length_Lee,
-                              np.mean(unad_intervals[:, 1] - unad_intervals[:, 0]),
-                              power_sel / float((beta != 0).sum()),
-                              power_Lee / float((beta != 0).sum()),
-                              power_unad / float((beta != 0).sum()),
-                              power_sel_dis,
-                              power_Lee_dis,
-                              power_unad_dis,
-                              fdr_sel_dis,
-                              fdr_Lee_dis,
-                              fdr_unad_dis,
-                              nonzero.sum(),
-                              nactive_LASSO,
-                              nactive_nonrand,
-                              sel_discoveries.sum(),
-                              Lee_discoveries.sum(),
-                              unad_discoveries.sum(),
-                              inf_entries.sum() / float(nactive_LASSO),
-                              np.mean(estimate - beta_target_rand)))
-
-    elif nonzero.sum() > 0 and nactive_LASSO == 0:
-        beta_target_rand = np.linalg.pinv(X[:, nonzero]).dot(true_mean)
-
-        est_LASSO = glm_LASSO
-        rel_LASSO = np.zeros(p)
-        sel_MLE = np.zeros(p)
-        estimate, _, _, sel_pval, sel_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-            target=target,
-            dispersion=dispersion)
-        sel_MLE[nonzero] = estimate
-        ind_estimator = np.zeros(p)
-        ind_estimator[nonzero] = ind_unbiased_estimator
-
-        true_signals = np.zeros(p, np.bool)
-        true_signals[beta != 0] = 1
-        true_set = np.asarray([u for u in range(p) if true_signals[u]])
-        active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
-
-        active_rand_bool = np.zeros(nonzero.sum(), np.bool)
-        for x in range(nonzero.sum()):
-            active_rand_bool[x] = (np.in1d(active_set_rand[x], true_set).sum() > 0)
-
-        cov_sel, _ = coverage(sel_intervals, sel_pval, beta_target_rand)
-        power_sel = (
-            (active_rand_bool) * (np.logical_or((0. < sel_intervals[:, 0]), (0. > sel_intervals[:, 1])))).sum()
-
-        sel_discoveries = BHfilter(sel_pval, q=0.1)
-
-        power_sel_dis = (sel_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
-
-        fdr_sel_dis = (sel_discoveries * ~active_rand_bool).sum() / float(max(sel_discoveries.sum(), 1.))
-
-        return np.vstack((relative_risk(sel_MLE, beta, Sigma),
-                          relative_risk(ind_estimator, beta, Sigma),
-                          relative_risk(randomized_lasso.initial_soln, beta, Sigma),
-                          relative_risk(randomized_lasso._beta_full, beta, Sigma),
-                          relative_risk(rel_LASSO, beta, Sigma),
-                          relative_risk(est_LASSO, beta, Sigma),
-                          cov_sel,
-                          1.,
-                          0.,
-                          np.mean(sel_intervals[:, 1] - sel_intervals[:, 0]),
-                          0.,
-                          0.,
-                          power_sel / float((beta != 0).sum()),
-                          0.,
-                          0.,
-                          power_sel_dis,
-                          0.,
-                          0.,
-                          fdr_sel_dis,
-                          0.,
-                          0.,
-                          nonzero.sum(),
-                          nactive_LASSO,
-                          nactive_nonrand,
-                          sel_discoveries.sum(),
-                          0.,
-                          0.,
-                          0.,
-                          np.mean(estimate - beta_target_rand)))
-
-    else:
-        return np.zeros(29)
-
 def comparison_risk_inference_selected_cv(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
                                           randomizer_scale=np.sqrt(0.25), target = "selected",
                                           full_dispersion = True):
 
     while True:
         X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+        # X, y, beta = gaussian_instance(n=n,
+        #                                p=p,
+        #                                signal=3.5,
+        #                                s=s,
+        #                                equicorrelated=False,
+        #                                rho=0.20,
+        #                                sigma=1,
+        #                                random_signs=True)[:3]
+        #
+        # idx = np.arange(p)
+        # Sigma = rho ** np.abs(np.subtract.outer(idx, idx))
+        # sigma = 1
+        # print("snr", beta.T.dot(Sigma).dot(beta) / ((sigma ** 2.) * n))
+
         true_mean = X.dot(beta)
 
         X -= X.mean(0)[None, :]
@@ -390,19 +209,20 @@ def comparison_risk_inference_selected_cv(n=500, p=100, nval=500, rho=0.35, s=5,
 
         print("estimated and true sigma", sigma, sigma_)
 
-        glm_LASSO, _, lam_min, lam_1se = glmnet_lasso(X, y)
-        active_LASSO = (glm_LASSO != 0)
+        glm_LASSO, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y)
+        active_LASSO = (glm_LASSO_min != 0)
+        #active_LASSO = (glm_LASSO != 0)
         nactive_LASSO = active_LASSO.sum()
 
         randomized_lasso = highdim.gaussian(X,
                                             y,
-                                            n * lam_1se * np.ones(p),
+                                            n * lam_min * np.ones(p),
                                             randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
 
         signs = randomized_lasso.fit()
         nonzero = signs != 0
 
-        lasso_Liu = lasso_full.gaussian(X, y, n * lam_1se)
+        lasso_Liu = lasso_full.gaussian(X, y, n * lam_min)
         Lasso_soln_Liu = lasso_Liu.fit()
         active_set_Liu = np.nonzero(Lasso_soln_Liu != 0)[0]
         nactive_Liu = active_set_Liu.shape[0]
@@ -415,10 +235,11 @@ def comparison_risk_inference_selected_cv(n=500, p=100, nval=500, rho=0.35, s=5,
             beta_target_nonrand = np.linalg.pinv(X[:, active_LASSO]).dot(true_mean)
             beta_target_Liu = beta[active_set_Liu]
 
-            est_LASSO = glm_LASSO
+            est_LASSO = glm_LASSO_min
             rel_LASSO = np.zeros(p)
             rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
-            Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_1se, sigma_, Type=0, alpha=0.1)
+            Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO_min, n * lam_min, sigma_, Type=0, alpha=0.1)
+            #Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_min, sigma_, Type=0, alpha=0.1)
 
             df = lasso_Liu.summary(level=0.90, compute_intervals=True, dispersion=dispersion)
             Liu_lower, Liu_upper, Liu_pval = np.asarray(df['lower_confidence']), \
@@ -792,12 +613,105 @@ def risk_comparison_cv(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0
                       relative_risk(rel_LASSO_min, beta, Sigma),
                       relative_risk(est_LASSO_min, beta, Sigma)))
 
+def Lee_selected_high(n=200, p=500, nval=200, rho=0.35, s=5, beta_type=2,
+                      snr=0.2, randomizer_scale=0.5, target = "full",
+                      tuning = "selective_MLE", full_dispersion = True):
+
+    while True:
+        X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+        X -= X.mean(0)[None, :]
+        X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
+        y = y - y.mean()
+
+        if full_dispersion:
+            dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
+            sigma_ = np.sqrt(dispersion)
+        else:
+            dispersion = None
+            sigma_ = np.std(y)
+
+        print("estimated and true sigma", sigma, sigma_)
+
+        glm_LASSO, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y)
+        active_LASSO = (glm_LASSO != 0)
+        nactive_LASSO = active_LASSO.sum()
+        active_nonrand = active_LASSO
+        nactive_nonrand = nactive_LASSO
+
+        if nactive_LASSO > 0:
+            beta_target_nonrand_py = np.linalg.pinv(X[:, active_LASSO]).dot(X.dot(beta))
+            Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_1se, sigma_, Type=0, alpha=0.1)
+
+            if (Lee_pval.shape[0] == beta_target_nonrand_py.shape[0]):
+
+                post_LASSO_OLS = np.linalg.pinv(X[:, active_nonrand]).dot(y)
+                unad_sd = sigma_ * np.sqrt(np.diag((np.linalg.inv(X[:, active_nonrand].T.dot(X[:, active_nonrand])))))
+
+                unad_intervals = np.vstack([post_LASSO_OLS - 1.65 * unad_sd,
+                                            post_LASSO_OLS + 1.65 * unad_sd]).T
+                unad_pval = ndist.cdf(post_LASSO_OLS / unad_sd)
+
+                true_signals = np.zeros(p, np.bool)
+                true_signals[beta != 0] = 1
+                true_set = np.asarray([u for u in range(p) if true_signals[u]])
+                active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
+                active_set_nonrand = np.asarray([q for q in range(p) if active_nonrand[q]])
+
+                active_LASSO_bool = np.zeros(nactive_LASSO, np.bool)
+                for z in range(nactive_LASSO):
+                    active_LASSO_bool[z] = (np.in1d(active_set_LASSO[z], true_set).sum() > 0)
+
+                active_nonrand_bool = np.zeros(nactive_nonrand, np.bool)
+                for w in range(nactive_nonrand):
+                    active_nonrand_bool[w] = (np.in1d(active_set_nonrand[w], true_set).sum() > 0)
+
+                cov_Lee, _ = coverage(Lee_intervals, Lee_pval, beta_target_nonrand_py)
+                inf_entries = np.isinf(Lee_intervals[:, 1] - Lee_intervals[:, 0])
+                if inf_entries.sum() == nactive_LASSO:
+                    length_Lee = 0.
+                else:
+                    length_Lee = np.mean((Lee_intervals[:, 1] - Lee_intervals[:, 0])[~inf_entries])
+                cov_unad, _ = coverage(unad_intervals, unad_pval, beta_target_nonrand_py)
+
+                power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]),
+                                                                  (0. > Lee_intervals[:, 1])))).sum()
+
+                power_unad = ((active_nonrand_bool) * (np.logical_or((0. < unad_intervals[:, 0]),
+                                                                     (0. > unad_intervals[:, 1])))).sum()
+
+                Lee_discoveries = BHfilter(Lee_pval, q=0.1)
+                unad_discoveries = BHfilter(unad_pval, q=0.1)
+
+                power_Lee_dis = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
+                power_unad_dis = (unad_discoveries * active_nonrand_bool).sum() / float((beta != 0).sum())
+
+                fdr_Lee_dis = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
+                fdr_unad_dis = (unad_discoveries * ~active_nonrand_bool).sum() / float(max(unad_discoveries.sum(), 1.))
+                break
+
+    if True:
+        return np.vstack((cov_Lee,
+                          cov_unad,
+                          length_Lee,
+                          np.mean(unad_intervals[:, 1] - unad_intervals[:, 0]),
+                          power_Lee / float((beta != 0).sum()),
+                          power_unad / float((beta != 0).sum()),
+                          power_Lee_dis,
+                          power_unad_dis,
+                          fdr_Lee_dis,
+                          fdr_unad_dis,
+                          nactive_LASSO,
+                          nactive_nonrand,
+                          Lee_discoveries.sum(),
+                          unad_discoveries.sum(),
+                          inf_entries.sum() / float(nactive_LASSO)))
+
 # if __name__ == "__main__":
 #
 #     ndraw = 50
 #
-#     target = "full"
-#     n, p, rho, s, beta_type, snr = 300, 100, 0.35, 5, 1, 0.10
+#     target = "selected"
+#     n, p, rho, s, beta_type, snr = 3000, 1000, 0.35, 30, 1, 0.10
 #
 #     if target == "selected":
 #         output_overall = np.zeros(35)
@@ -929,7 +843,7 @@ if __name__ == "__main__":
     ndraw = 50
 
     target = "selected"
-    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.30
+    n, p, rho, s, beta_type, snr = 300, 100, 0.35, 5, 1, 0.10
 
     if target == "selected":
         output_overall = np.zeros(12)
@@ -965,3 +879,44 @@ if __name__ == "__main__":
             sys.stderr.write("overall LASSO risk at lam.min " + str(output_overall[11] / float(i + 1)) + "\n" + "\n")
 
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")
+
+# if __name__ == "__main__":
+#
+#     ndraw = 20
+#     output_overall = np.zeros(15)
+#
+#     target = "full"
+#     tuning = "selective_MLE"
+#     n, p, rho, s, beta_type, snr = 200, 1000, 0.35, 10, 1, 0.10
+#
+#     if n > p:
+#         full_dispersion = True
+#     else:
+#         full_dispersion = False
+#     for i in range(ndraw):
+#         output = Lee_selected_high(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
+#                                    randomizer_scale=np.sqrt(0.50), target=target, tuning=tuning,
+#                                    full_dispersion=full_dispersion)
+#
+#         output_overall += np.squeeze(output)
+#
+#         sys.stderr.write("overall Lee coverage " + str(output_overall[0] / float(i + 1)) + "\n")
+#         sys.stderr.write("overall unad coverage " + str(output_overall[1] / float(i + 1)) + "\n" + "\n")
+#
+#         sys.stderr.write("overall Lee length " + str(output_overall[2] / float(i + 1)) + "\n")
+#         sys.stderr.write("overall unad length " + str(output_overall[3] / float(i + 1)) + "\n" + "\n")
+#
+#         sys.stderr.write("proportion of Lee intervals that are infty " + str(output_overall[14] / float(i + 1)) + "\n"+ "\n")
+#
+#         sys.stderr.write("overall Lee power " + str(output_overall[4] / float(i + 1)) + "\n")
+#         sys.stderr.write("overall unad power " + str(output_overall[5] / float(i + 1)) + "\n" + "\n")
+#
+#         sys.stderr.write("overall Lee fdr " + str(output_overall[6] / float(i + 1)) + "\n")
+#         sys.stderr.write("overall unad fdr " + str(output_overall[7] / float(i + 1)) + "\n" + "\n")
+#
+#         sys.stderr.write("overall Lee power post BH  " + str(output_overall[8] / float(i + 1)) + "\n")
+#         sys.stderr.write("overall unad power post BH " + str(output_overall[9] / float(i + 1)) + "\n" + "\n")
+#
+#         sys.stderr.write("average Lee discoveries  " + str(output_overall[12] / float(i + 1)) + "\n")
+#
+#         sys.stderr.write("iteration completed " + str(i + 1) + "\n")
