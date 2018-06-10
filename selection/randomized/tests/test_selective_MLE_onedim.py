@@ -5,7 +5,7 @@ from scipy.stats import norm as ndist
 import matplotlib.pyplot as plt
 import nose.tools as nt
 
-from ..lasso import highdim
+from ..lasso import lasso, full_targets
 from ...tests.instance import gaussian_instance
 from statsmodels.distributions import ECDF
 
@@ -17,11 +17,11 @@ def test_onedim_lasso(n=50000, W=1.5, signal=2., sigma=1, randomizer_scale=1):
         X /= np.sqrt((X**2).sum(0))[None, :]
         Y = X.dot(beta) + sigma * np.random.standard_normal(n)
 
-        conv = highdim.gaussian(X,
-                                Y,
-                                W * np.ones(X.shape[1]),
-                                randomizer_scale=randomizer_scale * sigma,
-                                ridge_term=0.)
+        conv = lasso.gaussian(X,
+                              Y,
+                              W * np.ones(X.shape[1]),
+                              randomizer_scale=randomizer_scale * sigma,
+                              ridge_term=0.)
 
         signs = conv.fit()
         nonzero = signs != 0
@@ -30,14 +30,24 @@ def test_onedim_lasso(n=50000, W=1.5, signal=2., sigma=1, randomizer_scale=1):
 
             # this is current code where we estimate sigma
 
-            estimate_cur, I_cur, Z_cur, pv_cur = conv.selective_MLE(target="full")
+            (observed_target, 
+             cov_target, 
+             cov_target_score, 
+             alternatives) = full_targets(conv.loglike, 
+                                          conv._W, 
+                                          nonzero)
+            
+            estimate_cur, I_cur, Z_cur, pv_cur = conv.selective_MLE(observed_target, 
+                                                                    cov_target, 
+                                                                    cov_target_score)[:4]
 
             # this matches exactly with old code
 
             target_Z = X.T.dot(Y) / np.sqrt((X**2).sum(0))
 
-            estimate, I, Z, pv = conv.sampler.selective_MLE(target_Z, sigma**2 * np.ones((1,1)), -sigma**2 * np.ones((1,1)), np.ones((1,)),
-                                                            solve_args={'tol':1.e-12})
+            estimate, I, Z, pv = conv.sampler.selective_MLE(target_Z, sigma**2 * np.ones((1,1)), 
+                                                            -sigma**2 * np.ones((1,1)), np.ones((1,)),
+                                                            solve_args={'tol':1.e-12})[:4]
 
             target_transform = (-np.identity(1), np.zeros(1))
             s = signs
