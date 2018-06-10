@@ -480,7 +480,7 @@ class affine_gaussian_sampler(optimization_sampler):
                       cov_target, 
                       cov_target_score, 
                       feasible_point, 
-                      solve_args={'tol':1.e-12}, 
+                      solve_args={'tol':1.e-12},
                       alpha=0.1):
         """
         Selective MLE based on approximation of
