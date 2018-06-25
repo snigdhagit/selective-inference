@@ -3,8 +3,8 @@ import nose.tools as nt
 import rpy2.robjects as rpy
 from rpy2.robjects import numpy2ri
 
-from ..lasso import lasso, full_targets, selected_targets
-from ...tests.instance import gaussian_instance
+from selection.randomized.lasso import lasso, full_targets, selected_targets
+from selection.tests.instance import gaussian_instance
 
 def test_full_targets(n=2000, p=200, signal_fac=0.5, s=5, sigma=3, rho=0.4, randomizer_scale=0.25, full_dispersion=True):
     """
@@ -140,14 +140,14 @@ def main(nsim=500, full=True):
         print(np.mean(P0), np.std(P0), np.mean(np.array(P0) < 0.1), np.mean(np.array(PA) < 0.1), np.mean(cover),
               np.mean(avg_length), 'null pvalue + power + length')
     
-        if i % 3 == 0 and i > 0:
-            U = np.linspace(0, 1, 101)
-            plt.clf()
-            if len(P0) > 0:
-                plt.plot(U, ECDF(P0)(U))
-            if len(PA) > 0:
-                plt.plot(U, ECDF(PA)(U), 'r')
-            plt.plot([0, 1], [0, 1], 'k--')
-    plt.show()
+    #     if i % 3 == 0 and i > 0:
+    #         U = np.linspace(0, 1, 101)
+    #         plt.clf()
+    #         if len(P0) > 0:
+    #             plt.plot(U, ECDF(P0)(U))
+    #         if len(PA) > 0:
+    #             plt.plot(U, ECDF(PA)(U), 'r')
+    #         plt.plot([0, 1], [0, 1], 'k--')
+    # plt.show()
 
-
+main()
