@@ -44,7 +44,7 @@ class marginal_screening(object):
 
     def __init__(self,
                  observed_data,
-                 covariance, 
+                 covariance,
                  randomizer_scale,
                  marginal_level,
                  perturb=None):
@@ -95,7 +95,7 @@ class marginal_screening(object):
 
         cov, prec = self.randomizer.cov_prec
         if np.asarray(prec).shape in [(), (0,)]:
-            cond_precision = opt_linear.T.dot(opt_linear) * prec  ## XXX implicitly assuming prec is 
+            cond_precision = opt_linear.T.dot(opt_linear) * prec  ## XXX implicitly assuming prec is
                                                                   ## scalar multiple of identity
             cond_cov = np.linalg.inv(cond_precision)
             logdens_linear = cond_cov.dot(opt_linear.T) * prec    ## here also
@@ -185,13 +185,10 @@ class marginal_screening(object):
                       level=0.9,
                       solve_args={'tol':1.e-12}):
         """
-
         Parameters
         ----------
-
         level : float
             Confidence level.
-
         """
 
         return self.sampler.selective_MLE(observed_target,
@@ -209,7 +206,7 @@ class marginal_screening(object):
         cov_target = np.linalg.inv(Q)
         observed_target = -np.linalg.inv(Q).dot(self.observed_score_state[features])
         crosscov_target_score = -score_linear.dot(cov_target)
-        alternatives = ([{1: 'greater', -1: 'less'}[int(s)] for s in 
+        alternatives = ([{1: 'greater', -1: 'less'}[int(s)] for s in
                          self.selection_variable['sign'][features]])
 
         return observed_target, cov_target, crosscov_target_score.T, alternatives
@@ -223,7 +220,7 @@ class marginal_screening(object):
         cov_target = Q
         observed_target = -self.observed_score_state[features]
         crosscov_target_score = -score_linear
-        alternatives = ([{1: 'greater', -1: 'less'}[int(s)] for s in 
+        alternatives = ([{1: 'greater', -1: 'less'}[int(s)] for s in
                          self.selection_variable['sign'][features]])
 
         return observed_target, cov_target, crosscov_target_score.T, alternatives
@@ -232,7 +229,7 @@ class BH(marginal_screening):
 
     def __init__(self,
                  observed_score,
-                 covariance, 
+                 covariance,
                  randomizer_scale,
                  BH_level,
                  perturb=None):
@@ -284,8 +281,8 @@ class BH(marginal_screening):
 
         self.threshold = threshold
 
-        self.observed_opt_state = (self._initial_omega[self._selected] - 
-                                   self.observed_score_state[self._selected] - 
+        self.observed_opt_state = (self._initial_omega[self._selected] -
+                                   self.observed_score_state[self._selected] -
                                   np.diag(active_signs).dot(self.threshold[self._selected]))
         self.num_opt_var = self.observed_opt_state.shape[0]
 
@@ -331,5 +328,4 @@ class BH(marginal_screening):
                                                logdens_transform,
                                                selection_info=self.selection_variable)
         return self._selected
-
 

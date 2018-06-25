@@ -6,6 +6,7 @@ from scipy.stats import norm as ndist
 
 from ...randomized.lasso import lasso, selected_targets, full_targets
 
+
 def BHfilter(pval, q=0.2):
     robjects.r.assign('pval', pval)
     robjects.r.assign('q', q)
@@ -15,6 +16,7 @@ def BHfilter(pval, q=0.2):
     ind = np.zeros(pval.shape[0], np.bool)
     ind[np.asarray(S, np.int)] = 1
     return ind
+
 
 def selInf_R(X, y, beta, lam, sigma, Type, alpha=0.1):
     rpy2.robjects.numpy2ri.activate()
@@ -50,6 +52,7 @@ def selInf_R(X, y, beta, lam, sigma, Type, alpha=0.1):
     rpy2.robjects.numpy2ri.deactivate()
     return ci, pvalue
 
+
 def glmnet_lasso(X, y, lambda_val):
     rpy2.robjects.numpy2ri.activate()
     robjects.r('''
@@ -72,6 +75,7 @@ def glmnet_lasso(X, y, lambda_val):
     rpy2.robjects.numpy2ri.deactivate()
     return estimate
 
+
 def sim_xy(n, p, nval, rho=0, s=5, beta_type=2, snr=1):
     rpy2.robjects.numpy2ri.activate()
     robjects.r('''
@@ -92,7 +96,8 @@ def sim_xy(n, p, nval, rho=0, s=5, beta_type=2, snr=1):
 
     return X, y, X_val, y_val, Sigma, beta, sigma
 
-def tuned_lasso(X, y, X_val,y_val):
+
+def tuned_lasso(X, y, X_val, y_val):
     rpy2.robjects.numpy2ri.activate()
     robjects.r('''
         tuned_lasso_estimator = function(X,Y,X.val,Y.val){
@@ -106,14 +111,12 @@ def tuned_lasso(X, y, X_val,y_val):
         beta.hat.lasso = as.matrix(coef(LASSO))
         min.lam = min(rel.LASSO$lambda)
         max.lam = max(rel.LASSO$lambda)
-
         lam.seq = exp(seq(log(max.lam),log(min.lam),length=rel.LASSO$nlambda))
-  
+
         muhat.val.rellasso = as.matrix(predict(rel.LASSO, X.val))
         muhat.val.lasso = as.matrix(predict(LASSO, X.val))
         err.val.rellasso = colMeans((muhat.val.rellasso - Y.val)^2)
         err.val.lasso = colMeans((muhat.val.lasso - Y.val)^2)
-
         opt_lam = ceiling(which.min(err.val.rellasso)/10)
         lambda.tuned.rellasso = lam.seq[opt_lam]
         lambda.tuned.lasso = lam.seq[which.min(err.val.lasso)]
@@ -144,22 +147,22 @@ def tuned_lasso(X, y, X_val,y_val):
     rpy2.robjects.numpy2ri.deactivate()
     return estimator_rellasso, estimator_lasso, lam_tuned_rellasso, lam_tuned_lasso, lam_seq
 
-def relative_risk(est, truth, Sigma):
 
-    return (est-truth).T.dot(Sigma).dot(est-truth)/truth.T.dot(Sigma).dot(truth)
+def relative_risk(est, truth, Sigma):
+    return (est - truth).T.dot(Sigma).dot(est - truth) / truth.T.dot(Sigma).dot(truth)
+
 
 def coverage(intervals, pval, truth):
-    if (truth!=0).sum()!=0:
+    if (truth != 0).sum() != 0:
         avg_power = np.mean(pval[truth != 0])
     else:
         avg_power = 0.
-    return np.mean((truth > intervals[:, 0])*(truth < intervals[:, 1])), avg_power
+    return np.mean((truth > intervals[:, 0]) * (truth < intervals[:, 1])), avg_power
 
 
 def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=2, snr=0.20,
-                                       randomizer_scale=np.sqrt(0.25), target = "selected",
-                                       tuning = "selective_MLE", full_dispersion = True):
-
+                                       randomizer_scale=np.sqrt(0.25), target="selected",
+                                       tuning="selective_MLE", full_dispersion=True):
     while True:
         X, y, X_val, y_val, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho,
                                                         s=s, beta_type=beta_type, snr=snr)
@@ -202,19 +205,19 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
             nonzero = signs != 0
 
             if target == 'full':
-                (observed_target, 
-                 cov_target, 
-                 cov_target_score, 
-                 alternatives) = full_targets(conv.loglike, 
-                                              conv._W, 
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = full_targets(conv.loglike,
+                                              conv._W,
                                               nonzero,
                                               dispersion=dispersion)
             elif target == 'selected':
-                (observed_target, 
-                 cov_target, 
-                 cov_target_score, 
-                 alternatives) = selected_targets(conv.loglike, 
-                                                  conv._W, 
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = selected_targets(conv.loglike,
+                                                  conv._W,
                                                   nonzero,
                                                   dispersion=dispersion)
 
@@ -227,7 +230,6 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
                 err[k] = np.mean((y_val - X_val.dot(full_estimate)) ** 2.)
             elif tuning == "randomized_LASSO":
                 err[k] = np.mean((y_val - X_val.dot(conv.initial_soln)) ** 2.)
-
 
         lam = lam_seq[np.argmin(err)]
         sys.stderr.write("lambda from randomized LASSO " + str(lam) + "\n")
@@ -246,7 +248,7 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
         sys.stderr.write("recall glmnet at tuned lambda " + str((glm_LASSO != 0).sum()) + "\n")
         sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 
-        if nactive_LASSO>0 and nonzero.sum()>0 and nactive_nonrand>0:
+        if nactive_LASSO > 0 and nonzero.sum() > 0 and nactive_nonrand > 0:
             beta_target_rand = np.linalg.pinv(X[:, nonzero]).dot(true_mean)
             beta_target_nonrand_py = np.linalg.pinv(X[:, active_LASSO]).dot(true_mean)
             beta_target_nonrand = np.linalg.pinv(X[:, active_nonrand]).dot(true_mean)
@@ -257,27 +259,27 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
                 sel_MLE = np.zeros(p)
 
                 if target == 'full':
-                    (observed_target, 
-                     cov_target, 
-                     cov_target_score, 
-                     alternatives) = full_targets(randomized_lasso.loglike, 
-                                                  randomized_lasso._W, 
+                    (observed_target,
+                     cov_target,
+                     cov_target_score,
+                     alternatives) = full_targets(randomized_lasso.loglike,
+                                                  randomized_lasso._W,
                                                   nonzero,
                                                   dispersion=dispersion)
                 elif target == 'selected':
-                    (observed_target, 
-                     cov_target, 
-                     cov_target_score, 
-                     alternatives) = selected_targets(randomized_lasso.loglike, 
-                                                      randomized_lasso._W, 
+                    (observed_target,
+                     cov_target,
+                     cov_target_score,
+                     alternatives) = selected_targets(randomized_lasso.loglike,
+                                                      randomized_lasso._W,
                                                       nonzero,
                                                       dispersion=dispersion)
 
-                (estimate, 
-                 _, 
-                 _, 
-                 sel_pval, 
-                 sel_intervals, 
+                (estimate,
+                 _,
+                 _,
+                 sel_pval,
+                 sel_intervals,
                  ind_unbiased_estimator) = randomized_lasso.selective_MLE(observed_target,
                                                                           cov_target,
                                                                           cov_target_score)
@@ -314,11 +316,12 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
                 cov_unad, _ = coverage(unad_intervals, unad_pval, beta_target_nonrand)
 
                 power_sel = (
-                (active_rand_bool) * (np.logical_or((0. < sel_intervals[:, 0]), (0. > sel_intervals[:, 1])))).sum()
+                    (active_rand_bool) * (np.logical_or((0. < sel_intervals[:, 0]), (0. > sel_intervals[:, 1])))).sum()
                 power_Lee = (
-                (active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()
+                    (active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()
                 power_unad = (
-                (active_nonrand_bool) * (np.logical_or((0. < unad_intervals[:, 0]), (0. > unad_intervals[:, 1])))).sum()
+                    (active_nonrand_bool) * (
+                    np.logical_or((0. < unad_intervals[:, 0]), (0. > unad_intervals[:, 1])))).sum()
 
                 sel_discoveries = BHfilter(sel_pval, q=0.1)
                 Lee_discoveries = BHfilter(Lee_pval, q=0.1)
@@ -336,7 +339,7 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
     if True:
         return np.vstack((relative_risk(sel_MLE, beta, Sigma),
                           relative_risk(ind_estimator, beta, Sigma),
-                          relative_risk(randomized_lasso.initial_soln , beta, Sigma),
+                          relative_risk(randomized_lasso.initial_soln, beta, Sigma),
                           relative_risk(randomized_lasso._beta_full, beta, Sigma),
                           relative_risk(rel_LASSO, beta, Sigma),
                           relative_risk(est_LASSO, beta, Sigma),
@@ -346,9 +349,9 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
                           np.mean(sel_intervals[:, 1] - sel_intervals[:, 0]),
                           np.mean(Lee_intervals[:, 1] - Lee_intervals[:, 0]),
                           np.mean(unad_intervals[:, 1] - unad_intervals[:, 0]),
-                          power_sel/float((beta != 0).sum()),
-                          power_Lee/float((beta != 0).sum()),
-                          power_unad/float((beta != 0).sum()),
+                          power_sel / float((beta != 0).sum()),
+                          power_Lee / float((beta != 0).sum()),
+                          power_unad / float((beta != 0).sum()),
                           power_sel_dis,
                           power_Lee_dis,
                           power_unad_dis,
@@ -362,10 +365,10 @@ def comparison_risk_inference_selected(n=500, p=100, nval=500, rho=0.35, s=5, be
                           Lee_discoveries.sum(),
                           unad_discoveries.sum()))
 
-def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_type=2,
-                                   snr=0.2, randomizer_scale=0.5, target = "full",
-                                   tuning = "selective_MLE", full_dispersion = True):
 
+def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_type=2,
+                                   snr=0.2, randomizer_scale=0.5, target="full",
+                                   tuning="selective_MLE", full_dispersion=True):
     while True:
         X, y, X_val, y_val, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho,
                                                         s=s, beta_type=beta_type, snr=snr)
@@ -374,9 +377,9 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
         nactive_nonrand = active_nonrand.sum()
 
         X -= X.mean(0)[None, :]
-        X /= (X.std(0)[None, :] * np.sqrt(n/(n-1.)))
+        X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
         X_val -= X_val.mean(0)[None, :]
-        X_val /= (X_val.std(0)[None, :] * np.sqrt(n/(n-1.)))
+        X_val /= (X_val.std(0)[None, :] * np.sqrt(n / (n - 1.)))
 
         y = y - y.mean()
         y_val = y_val - y_val.mean()
@@ -396,7 +399,7 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
 
         tune_num = 50
         rand_tune_num = 10
-        rand_scale_seq = np.linspace(0.05, 0.5, num = rand_tune_num)
+        rand_scale_seq = np.linspace(0.05, 0.5, num=rand_tune_num)
         lam_seq = sigma_ * np.linspace(0.25, 2.75, num=tune_num) * \
                   np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
         err = np.zeros((rand_tune_num, tune_num))
@@ -408,30 +411,30 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                                       y,
                                       W,
                                       randomizer_scale=np.sqrt(n) *
-                                      randomizer_scale * sigma_)
+                                                       randomizer_scale * sigma_)
                 signs = conv.fit()
                 nonzero = signs != 0
 
                 if target == 'full':
-                    (observed_target, 
-                     cov_target, 
-                     cov_target_score, 
-                     alternatives) = full_targets(conv.loglike, 
-                                                  conv._W, 
+                    (observed_target,
+                     cov_target,
+                     cov_target_score,
+                     alternatives) = full_targets(conv.loglike,
+                                                  conv._W,
                                                   nonzero,
                                                   dispersion=dispersion)
                 elif target == 'selected':
-                    (observed_target, 
-                     cov_target, 
-                     cov_target_score, 
-                     alternatives) = selected_targets(conv.loglike, 
-                                                      conv._W, 
+                    (observed_target,
+                     cov_target,
+                     cov_target_score,
+                     alternatives) = selected_targets(conv.loglike,
+                                                      conv._W,
                                                       nonzero,
                                                       dispersion=dispersion)
 
                 if tuning == "selective_MLE":
-                    estimate, _, _, _, _, _ = conv.selective_MLE(observed_target, 
-                                                                 cov_target, 
+                    estimate, _, _, _, _, _ = conv.selective_MLE(observed_target,
+                                                                 cov_target,
                                                                  cov_target_score)
                     full_estimate = np.zeros(p)
                     full_estimate[nonzero] = estimate
@@ -442,10 +445,10 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
         arg_min = np.argwhere(err == np.min(err))
         lam = lam_seq[arg_min[0, 1]]
         randomizer_scale = rand_scale_seq[arg_min[0, 0]]
-        #lam = lam_seq[np.argmin(err)]
+        # lam = lam_seq[np.argmin(err)]
         sys.stderr.write("lambda from randomized LASSO " + str(lam) + "\n")
         sys.stderr.write("tuned randomized scale " + str(randomizer_scale) + "\n")
-        #print(lam_tuned_lasso * n, lam, lam_seq)
+        # print(lam_tuned_lasso * n, lam, lam_seq)
 
         randomized_lasso = lasso.gaussian(X,
                                           y,
@@ -459,7 +462,7 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
         sys.stderr.write("recall glmnet at tuned lambda " + str((glm_LASSO != 0).sum()) + "\n")
         sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 
-        if nonzero.sum()>0 and nactive_nonrand>0 and nonzero.sum()<50:
+        if nonzero.sum() > 0 and nactive_nonrand > 0 and nonzero.sum() < 50:
             beta_target_rand = beta[nonzero]
             beta_target_nonrand_py = beta[active_LASSO]
             beta_target_nonrand = beta[active_nonrand]
@@ -467,29 +470,29 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
             Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_tuned_lasso, sigma_, Type=1, alpha=0.1)
 
             if target == 'full':
-                (observed_target, 
-                 cov_target, 
-                 cov_target_score, 
-                 alternatives) = full_targets(randomized_lasso.loglike, 
-                                              randomized_lasso._W, 
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = full_targets(randomized_lasso.loglike,
+                                              randomized_lasso._W,
                                               nonzero,
                                               dispersion=dispersion)
             elif target == 'selected':
-                (observed_target, 
-                 cov_target, 
-                 cov_target_score, 
-                 alternatives) = selected_targets(randomized_lasso.loglike, 
-                                                  randomized_lasso._W, 
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = selected_targets(randomized_lasso.loglike,
+                                                  randomized_lasso._W,
                                                   nonzero,
                                                   dispersion=dispersion)
 
             if (Lee_pval.shape[0] == beta_target_nonrand_py.shape[0]):
                 sel_MLE = np.zeros(p)
-                (estimate, 
-                 _, 
-                 _, 
-                 sel_pval, 
-                 sel_intervals, 
+                (estimate,
+                 _,
+                 _,
+                 sel_pval,
+                 sel_intervals,
                  ind_unbiased_estimator) = randomized_lasso.selective_MLE(observed_target,
                                                                           cov_target,
                                                                           cov_target_score)
@@ -551,7 +554,7 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
     if True:
         return np.vstack((relative_risk(sel_MLE, beta, Sigma),
                           relative_risk(ind_estimator, beta, Sigma),
-                          relative_risk(randomized_lasso.initial_soln , beta, Sigma),
+                          relative_risk(randomized_lasso.initial_soln, beta, Sigma),
                           relative_risk(randomized_lasso._beta_full, beta, Sigma),
                           relative_risk(rel_LASSO, beta, Sigma),
                           relative_risk(est_LASSO, beta, Sigma),
@@ -561,9 +564,9 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                           np.mean(sel_intervals[:, 1] - sel_intervals[:, 0]),
                           np.mean(Lee_intervals[:, 1] - Lee_intervals[:, 0]),
                           np.mean(unad_intervals[:, 1] - unad_intervals[:, 0]),
-                          power_sel/float((beta != 0).sum()),
-                          power_Lee/float((beta != 0).sum()),
-                          power_unad/float((beta != 0).sum()),
+                          power_sel / float((beta != 0).sum()),
+                          power_Lee / float((beta != 0).sum()),
+                          power_unad / float((beta != 0).sum()),
                           power_sel_dis,
                           power_Lee_dis,
                           power_unad_dis,
@@ -577,20 +580,20 @@ def comparison_risk_inference_full(n=200, p=500, nval=200, rho=0.35, s=5, beta_t
                           Lee_discoveries.sum(),
                           unad_discoveries.sum()))
 
-def main():
 
+def main():
     ndraw = 50
     output_overall = np.zeros(27)
 
     target = "selected"
     tuning = "selective_MLE"
     n, p, rho, s, beta_type, snr = 500, 100, 0.70, 5, 1, 0.10
-    #nval = 100
+    # nval = 100
 
     if target == "selected":
         for i in range(ndraw):
             output = comparison_risk_inference_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                                        randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
+                                                        randomizer_scale=np.sqrt(0.25), target=target, tuning=tuning,
                                                         full_dispersion=True)
             output_overall += np.squeeze(output)
 
@@ -640,7 +643,7 @@ def main():
             full_dispersion = False
         for i in range(ndraw):
             output = comparison_risk_inference_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                                    randomizer_scale=np.sqrt(0.25), target=target, tuning= tuning,
+                                                    randomizer_scale=np.sqrt(0.25), target=target, tuning=tuning,
                                                     full_dispersion=full_dispersion)
             output_overall += np.squeeze(output)
 
@@ -682,3 +685,5 @@ def main():
             sys.stderr.write("average tuned LASSO discoveries " + str(output_overall[26] / float(i + 1)) + "\n" + "\n")
 
             sys.stderr.write("iteration completed " + str(i + 1) + "\n")
+
+

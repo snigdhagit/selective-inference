@@ -232,6 +232,8 @@ class lasso(object):
 
         cond_mean = -logdens_linear.dot(self.observed_score_state + opt_offset)
 
+        # density as a function of score and optimization variables
+
         def log_density(logdens_linear, offset, cond_prec, score, opt):
             if score.ndim == 1:
                 mean_term = logdens_linear.dot(score.T + offset).T
@@ -307,6 +309,11 @@ class lasso(object):
                                                   parameter=parameter,
                                                   sample=opt_sample,
                                                   alternatives=alternatives)
+
+        MLE_intervals = self.selective_MLE(observed_target,
+                                           cov_target,
+                                           cov_target_score)[5]
+
         if not np.all(parameter == 0):
             pvalues = self.sampler.coefficient_pvalues(observed_target,
                                                        cov_target,
@@ -319,10 +326,17 @@ class lasso(object):
 
         intervals = None
         if compute_intervals:
+
+            MLE_intervals = self.selective_MLE(observed_target,
+                                               cov_target,
+                                               cov_target_score)[4]
+
             intervals = self.sampler.confidence_intervals(observed_target,
                                                           cov_target,
                                                           cov_target_score,
-                                                          sample=opt_sample)
+                                                          sample=opt_sample,
+                                                          initial_guess=MLE_intervals,
+                                                          level=level)
 
         return pivots, pvalues, intervals
 
@@ -337,7 +351,7 @@ class lasso(object):
         ----------
 
         """
-
+        
         return self.sampler.selective_MLE(observed_target,
                                           cov_target,
                                           cov_target_score,

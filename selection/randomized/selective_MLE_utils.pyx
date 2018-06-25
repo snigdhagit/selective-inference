@@ -19,7 +19,7 @@ cdef extern from "selective_mle.h":
                          int max_iter,                       # Maximum number of iterations
                          int min_iter,                       # Minimum number of iterations
                          double value_tol,                   # Tolerance for convergence based on value
-                         double initial_step)                # Initial stepsize 
+                         double initial_step)                # Initial stepsize
 
     double barrier_solve_affine(double *gradient,                   # Gradient vector
                                 double *opt_variable,               # Optimization variable
@@ -29,7 +29,7 @@ cdef extern from "selective_mle.h":
                                 double *scaling,                    # Diagonal scaling matrix for log barrier
                                 double *linear_term,                # Matrix A in constraint Au \leq b
                                 double *offset,                     # Offset b in constraint Au \leq b
-                                double *affine_term,                # Should be equal to b - A.dot(opt_variable)    
+                                double *affine_term,                # Should be equal to b - A.dot(opt_variable)
                                 int ndim,                           # Dimension of conjugate_arg, precision
                                 int ncon,                           # Number of constraints
                                 int max_iter,                       # Maximum number of iterations
@@ -47,7 +47,7 @@ def barrier_solve_(np.ndarray[DTYPE_float_t, ndim=1] gradient ,     # Gradient v
                    int max_iter=1000,
                    int min_iter=50,
                    double value_tol=1.e-8):
-   
+
     ndim = precision.shape[0]
 
     value = barrier_solve(<double *>gradient.data,
@@ -62,7 +62,7 @@ def barrier_solve_(np.ndarray[DTYPE_float_t, ndim=1] gradient ,     # Gradient v
                            value_tol,
                            initial_step)
 
-    barrier_hessian = lambda u, v: (-1./((v + u)**2.) + 1./(u**2.))			  
+    barrier_hessian = lambda u, v: (-1./((v + u)**2.) + 1./(u**2.))
     hess = np.linalg.inv(precision + np.diag(barrier_hessian(opt_variable, scaling)))
     return value, opt_variable, hess
 
@@ -79,7 +79,7 @@ def barrier_solve_affine_(np.ndarray[DTYPE_float_t, ndim=1] gradient ,     # Gra
                           int max_iter=1000,
                           int min_iter=50,
                           double value_tol=1.e-8):
-   
+
     ndim = precision.shape[0]
     ncon = linear_term.shape[0]
 
@@ -100,7 +100,7 @@ def barrier_solve_affine_(np.ndarray[DTYPE_float_t, ndim=1] gradient ,     # Gra
                                   initial_step)
 
     final_affine = offset - linear_term.dot(opt_variable)
-    barrier_hessian = lambda u, v: (-1./((v + u)**2.) + 1./(u**2.))			  
+    barrier_hessian = lambda u, v: (-1./((v + u)**2.) + 1./(u**2.))
     hess = np.linalg.inv(precision + linear_term.T.dot(np.diag(barrier_hessian(final_affine, scaling))).dot(linear_term))
     return value, opt_variable, hess
 
@@ -116,7 +116,7 @@ def solve_barrier_nonneg(conjugate_arg,
     opt_variable = np.asarray(feasible_point)
     opt_proposed = opt_variable.copy()
     scaling = np.sqrt(np.diag(precision))
-    
+
     return barrier_solve_(gradient,
                           opt_variable,
                           opt_proposed,
@@ -143,7 +143,7 @@ def solve_barrier_affine(conjugate_arg,
     opt_proposed = opt_variable.copy()
     A = linear_term
     scaling = np.sqrt(np.diag(A.dot(precision).dot(A.T)))
-    
+
     return barrier_solve_affine_(gradient,
                                  opt_variable,
                                  opt_proposed,
