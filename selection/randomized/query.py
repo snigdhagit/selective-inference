@@ -463,9 +463,10 @@ class affine_gaussian_sampler(optimization_sampler):
         logdens_lin, _ = self.logdens_transform
         target_lin = - logdens_lin.dot(
             cov_target_score.T.dot(prec_target))  # this determines how the conditional mean of optimization variables
-        # vary with target
-        # logdens_lin determines how the argument of the optimization density
-        # depends on the score, not how the mean depends on score, hence the minus sign
+                                                  # vary with target
+                                                  # logdens_lin determines how the argument of the optimization density
+                                                  # depends on the score, not how the mean depends on score, hence the minus sign
+
         target_offset = self.affine_con.mean - target_lin.dot(observed_target)
 
         cov_opt = self.affine_con.covariance
