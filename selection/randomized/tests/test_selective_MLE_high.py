@@ -3,7 +3,7 @@ import nose.tools as nt
 import rpy2.robjects as rpy
 from rpy2.robjects import numpy2ri
 
-from selection.randomized.lasso import lasso, full_targets, selected_targets
+from selection.randomized.lasso import lasso, full_targets, selected_targets, debiased_targets
 from selection.tests.instance import gaussian_instance
 
 
@@ -44,22 +44,34 @@ def test_full_targets(n=200, p=1000, signal_fac=0.5, s=5, sigma=3, rho=0.4, rand
         print("dimensions", n, p, nonzero.sum())
 
         if nonzero.sum() > 0:
-            dispersion = None
             if full_dispersion:
                 dispersion = np.linalg.norm(Y - X.dot(np.linalg.pinv(X).dot(Y))) ** 2 / (n - p)
+            else:
+                dispersion = None
 
-            (observed_target,
-             cov_target,
-             cov_target_score,
-             alternatives) = full_targets(conv.loglike,
-                                          conv._W,
-                                          nonzero,
-                                          dispersion=dispersion)
+            if n>p:
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = full_targets(conv.loglike,
+                                              conv._W,
+                                              nonzero, dispersion=dispersion)
+            else:
+                (observed_target,
+                 cov_target,
+                 cov_target_score,
+                 alternatives) = debiased_targets(conv.loglike,
+                                                  conv._W,
+                                                  nonzero,
+                                                  penalty=conv.penalty,
+                                                  dispersion=dispersion)
 
             estimate, _, _, pval, intervals, _ = conv.selective_MLE(observed_target,
                                                                     cov_target,
                                                                     cov_target_score,
                                                                     alternatives)
+
+            print("estimate, intervals", estimate, intervals)
 
             coverage = (beta[nonzero] > intervals[:, 0]) * (beta[nonzero] < intervals[:, 1])
             return pval[beta[nonzero] == 0], pval[beta[nonzero] != 0], coverage, intervals
@@ -83,6 +95,10 @@ def test_selected_targets(n=2000, p=200, signal_fac=1., s=5, sigma=3, rho=0.4, r
                           rho=rho,
                           sigma=sigma,
                           random_signs=True)[:3]
+
+        idx = np.arange(p)
+        sigmaX = rho ** np.abs(np.subtract.outer(idx, idx))
+        print("snr", beta.T.dot(sigmaX).dot(beta) / ((sigma ** 2.) * n))
 
         n, p = X.shape
 
@@ -124,7 +140,7 @@ def main(nsim=500, full=False):
     P0, PA, cover, length_int = [], [], [], []
     from statsmodels.distributions import ECDF
 
-    n, p, s = 500, 100, 5
+    n, p, s = 200, 1000, 10
 
     for i in range(nsim):
         if full:
@@ -147,4 +163,4 @@ def main(nsim=500, full=False):
             np.mean(P0), np.std(P0), np.mean(np.array(P0) < 0.1), np.mean(np.array(PA) < 0.1), np.mean(cover),
             np.mean(avg_length), 'null pvalue + power + length')
 
-main(nsim=100, full=False)
+main(nsim=100, full=True)
