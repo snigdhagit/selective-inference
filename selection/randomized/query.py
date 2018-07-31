@@ -14,6 +14,7 @@ from ..constraints.affine import sample_from_constraints
 
 
 class query(object):
+
     def __init__(self, randomization, perturb=None):
 
         self.randomization = randomization
@@ -120,6 +121,7 @@ class multiple_queries(object):
 
 
 class optimization_sampler(object):
+
     def __init__(self):
         raise NotImplementedError("abstract method")
 
@@ -170,7 +172,6 @@ class optimization_sampler(object):
 
         if sample is None:
             sample = self.sample(*sample_args)
-            sample = np.atleast_2d(sample)
 
         if parameter is None:
             parameter = self.reference
@@ -197,8 +198,7 @@ class optimization_sampler(object):
                              score_cov,
                              sample_args=(),
                              sample=None,
-                             level=0.9,
-                             initial_guess=None):
+                             level=0.9):
         '''
         Parameters
         ----------
@@ -215,8 +215,6 @@ class optimization_sampler(object):
         level : float (optional)
             Specify the
             confidence level.
-        initial_guess : np.float
-            Initial guesses at upper and lower limits, optional.
         Notes
         -----
         Construct selective confidence intervals
@@ -229,8 +227,8 @@ class optimization_sampler(object):
 
         if sample is None:
             sample = self.sample(*sample_args)
-            sample = np.vstack([sample] * 5)
-        ndraw = sample.shape[0]
+        else:
+            ndraw = sample.shape[0]
 
         _intervals = optimization_intervals([(self, sample, target_cov, score_cov)],
                                             observed_target, ndraw)
@@ -240,12 +238,7 @@ class optimization_sampler(object):
         for i in range(observed_target.shape[0]):
             keep = np.zeros_like(observed_target)
             keep[i] = 1.
-            if initial_guess is None:
-                l, u = _intervals.confidence_interval(keep, level=level)
-            else:
-                l, u = _intervals.confidence_interval(keep, level=level,
-                                                      guess=initial_guess[i])
-            limits.append((l, u))
+            limits.append(_intervals.confidence_interval(keep, level=level))
 
         return np.array(limits)
 
@@ -408,7 +401,6 @@ class affine_gaussian_sampler(optimization_sampler):
                  log_density,
                  logdens_transform,  # described how score enters log_density.
                  selection_info=None):
-
         '''
         Parameters
         ----------
@@ -460,13 +452,12 @@ class affine_gaussian_sampler(optimization_sampler):
             raise ValueError('no target specified')
 
         prec_target = np.linalg.inv(cov_target)
-        logdens_lin, _ = self.logdens_transform
+        logdens_lin, logdens_off = self.logdens_transform
         target_lin = - logdens_lin.dot(
             cov_target_score.T.dot(prec_target))  # this determines how the conditional mean of optimization variables
-                                                  # vary with target
-                                                  # logdens_lin determines how the argument of the optimization density
-                                                  # depends on the score, not how the mean depends on score, hence the minus sign
-
+        # vary with target
+        # logdens_lin determines how the argument of the optimization density
+        # depends on the score, not how the mean depends on score, hence the minus sign
         target_offset = self.affine_con.mean - target_lin.dot(observed_target)
 
         cov_opt = self.affine_con.covariance
@@ -499,10 +490,9 @@ class affine_gaussian_sampler(optimization_sampler):
         return final_estimator, observed_info_mean, Z_scores, pvalues, intervals, ind_unbiased_estimator
 
     def reparam_map(self, theta, observed_target, cov_target, cov_target_score, feasible_point, solve_args={}):
-
         prec_target = np.linalg.inv(cov_target)
         ndim = prec_target.shape[0]
-        logdens_lin, _ = self.logdens_transform
+        logdens_lin, logdens_off = self.logdens_transform
         target_lin = - logdens_lin.dot(cov_target_score.T.dot(prec_target))
         target_offset = self.affine_con.mean - target_lin.dot(observed_target)
 
@@ -512,10 +502,10 @@ class affine_gaussian_sampler(optimization_sampler):
         mean_param = target_lin.dot(theta) + target_offset
         conjugate_arg = prec_opt.dot(mean_param)
         init_soln = feasible_point
-        val, soln, hess = _solve_barrier_nonneg(conjugate_arg,
-                                                prec_opt,
-                                                init_soln,
-                                                **solve_args)
+        val, soln, hess = solve_barrier_nonneg(conjugate_arg,
+                                               prec_opt,
+                                               init_soln,
+                                               **solve_args)
 
         inter_map = cov_target.dot(target_lin.T.dot(prec_opt))
         param_map = theta + inter_map.dot(mean_param - soln)
@@ -529,106 +519,27 @@ class affine_gaussian_sampler(optimization_sampler):
 
         return param_map, log_normalizer_map, jacobian_map
 
-    def log_density_ray(self,
-                        candidate,
-                        direction,
-                        nuisance,
-                        gaussian_sample,
-                        opt_sample):
-        # implicitly caching (opt_sample, gaussian_sample) !!!
-
-        if not hasattr(self, "_direction") or not np.all(self._direction == direction):
-
-            logdens_lin, logdens_offset = self.logdens_transform
-
-            if opt_sample.shape[1] == 1:
-
-                prec = 1. / self.affine_con.covariance[0, 0]
-                quadratic_term = logdens_lin.dot(direction) ** 2 * prec
-                arg = (logdens_lin.dot(nuisance + logdens_offset) +
-                       logdens_lin.dot(direction) * gaussian_sample +
-                       opt_sample[:, 0])
-                linear_term = logdens_lin.dot(direction) * prec * arg
-                constant_term = arg ** 2 * prec
-
-                self._cache = {'linear_term': linear_term,
-                               'quadratic_term': quadratic_term,
-                               'constant_term': constant_term}
-            else:
-                self._direction = direction.copy()
-
-                # density is a Gaussian evaluated at
-                # O_i + A(N + (Z_i + theta) * gamma + b)
-
-                # b is logdens_offset
-                # A is logdens_linear
-                # Z_i is gaussian_sample[i] (real-valued)
-                # gamma is direction
-                # O_i is opt_sample[i]
-
-                # let arg1 = O_i
-                # let arg2 = A(N+b + Z_i \cdot gamma)
-                # then it is of the form (arg1 + arg2 + theta * A gamma)
-
-                logdens_lin, logdens_offset = self.logdens_transform
-                cov = self.affine_con.covariance
-                prec = np.linalg.inv(cov)
-                linear_part = logdens_lin.dot(direction)  # A gamma
-
-                if 1 in opt_sample.shape:
-                    pass  # stop3
-                cov = self.affine_con.covariance
-
-                quadratic_term = linear_part.T.dot(prec).dot(linear_part)
-
-                arg1 = opt_sample.T
-                arg2 = logdens_lin.dot(np.multiply.outer(direction, gaussian_sample) +
-                                       (nuisance + logdens_offset)[:, None])
-                arg = arg1 + arg2
-                linear_term = linear_part.T.dot(prec).dot(arg)
-                constant_term = np.sum(prec.dot(arg) * arg, 0)
-
-                self._cache = {'linear_term': linear_term,
-                               'quadratic_term': quadratic_term,
-                               'constant_term': constant_term}
-        (linear_term,
-         quadratic_term,
-         constant_term) = (self._cache['linear_term'],
-                           self._cache['quadratic_term'],
-                           self._cache['constant_term'])
-        return (-0.5 * candidate ** 2 * quadratic_term -
-                candidate * linear_term - 0.5 * constant_term)
-
 
 class optimization_intervals(object):
+
     def __init__(self,
-                 opt_sampling_info,  # a sequence of
-                 # (opt_sampler,
-                 #  opt_sample,
-                 #  target_cov,
-                 #  score_cov) objects
-                 #  in theory all target_cov
-                 #  should be about the same...
+                 opt_sampling_info,  # a sequence of (opt_sampler, opt_sample, target_cov, score_cov) objects
+                 # in theory all target_cov should be about the same...
                  observed,
                  nsample,  # how large a normal sample
                  target_cov=None):
 
-        self.blahvals = []
         # not all opt_samples will be of the same size as nsample
         # let's repeat them as necessary
 
         tiled_sampling_info = []
-        for (opt_sampler,
-             opt_sample,
-             t_cov,
-             score_cov) in opt_sampling_info:
+        for opt_sampler, opt_sample, t_cov, score_cov in opt_sampling_info:
             if opt_sample is not None:
                 if opt_sample.shape[0] < nsample:
                     if opt_sample.ndim == 1:
-                        tiled_opt_sample = np.tile(opt_sample, int(np.ceil(nsample / opt_sample.shape[0])))[:nsample]
+                        tiled_opt_sample = np.tile(opt_sample, np.ceil(nsample / opt_sample.shape[0]))[:nsample]
                     else:
-                        tiled_opt_sample = np.tile(opt_sample, (int(np.ceil(nsample / opt_sample.shape[0])), 1))[
-                                           :nsample]
+                        tiled_opt_sample = np.tile(opt_sample, (np.ceil(nsample / opt_sample.shape[0]), 1))[:nsample]
                 else:
                     tiled_opt_sample = opt_sample[:nsample]
             else:
@@ -638,14 +549,9 @@ class optimization_intervals(object):
         self.opt_sampling_info = tiled_sampling_info
         self._logden = 0
         for opt_sampler, opt_sample, _, _ in opt_sampling_info:
-            self._logden += opt_sampler.log_density(opt_sampler.observed_score_state,
-                                                    opt_sample)
-            if opt_sample.shape[0] < nsample:
-                self._logden = np.tile(self._logden, int(np.ceil(nsample / opt_sample.shape[0])))[:nsample]
+            self._logden += opt_sampler.log_density(opt_sampler.observed_score_state, opt_sample)
 
         self.observed = observed.copy()  # this is our observed unpenalized estimator
-
-        # average covariances in case they might be different
 
         if target_cov is None:
             self.target_cov = 0
@@ -679,11 +585,7 @@ class optimization_intervals(object):
 
         nuisance = []
         translate_dirs = []
-
-        for (opt_sampler,
-             opt_sample,
-             _,
-             score_cov) in self.opt_sampling_info:
+        for opt_sampler, opt_sample, _, score_cov in self.opt_sampling_info:
             cur_score_cov = linear_func.dot(score_cov)
 
             # cur_nuisance is in the view's score coordinates
@@ -691,8 +593,7 @@ class optimization_intervals(object):
             nuisance.append(cur_nuisance)
             translate_dirs.append(cur_score_cov / target_cov)
 
-        weights = self._weights(sample_stat,  # normal sample
-                                candidate,  # candidate value
+        weights = self._weights(sample_stat + candidate,  # normal sample under candidate
                                 nuisance,  # nuisance sufficient stats for each view
                                 translate_dirs)  # points will be moved like sample * score_cov
 
@@ -705,13 +606,13 @@ class optimization_intervals(object):
         else:
             return 1 - pivot
 
-    def confidence_interval(self, linear_func,
-                            level=0.90,
-                            how_many_sd=20,
-                            guess=None):
+    def confidence_interval(self, linear_func, level=0.90, how_many_sd=20):
 
         sample_stat = self._normal_sample.dot(linear_func)
         observed_stat = self.observed.dot(linear_func)
+
+        _norm = np.linalg.norm(linear_func)
+        grid_min, grid_max = -how_many_sd * np.std(sample_stat), how_many_sd * np.std(sample_stat)
 
         def _rootU(gamma):
             return self.pivot(linear_func,
@@ -723,54 +624,8 @@ class optimization_intervals(object):
                               observed_stat + gamma,
                               alternative='less') - (1 + level) / 2.
 
-        if guess is None:
-            grid_min, grid_max = -how_many_sd * np.std(sample_stat), how_many_sd * np.std(sample_stat)
-            upper = bisect(_rootU, grid_min, grid_max)
-            lower = bisect(_rootL, grid_min, upper)
-
-        else:
-            delta = 0.5 * (guess[1] - guess[0])
-
-            # find interval bracketing upper solution
-            count = 0
-            while True:
-                Lu, Uu = guess[1] - delta, guess[1] + delta
-                valU = _rootU(Uu)
-                valL = _rootU(Lu)
-                if valU * valL < 0:
-                    break
-                delta *= 2
-                count += 1
-            upper = bisect(_rootU, Lu, Uu)
-
-            # find interval bracketing lower solution
-            count = 0
-            while True:
-                Ll, Ul = guess[0] - delta, guess[0] + delta
-                valU = _rootL(Ul)
-                valL = _rootL(Ll)
-                if valU * valL < 0:
-                    break
-                delta *= 2
-                count += 1
-            lower = bisect(_rootL, Ll, Ul)
-        DEBUG = False
-        if DEBUG:
-            print(_rootL(lower), _rootU(upper))
-            print(_rootL(lower - 0.01 * (upper - lower)), _rootU(upper + 0.01 * (upper - lower)), 'perturb')
-            import matplotlib.pyplot as plt
-            plt.clf()
-            X = np.linspace(lower, upper, 101)
-            plt.plot(X, [_rootL(x) + (1 + level) / 2. for x in X])
-            plt.plot([lower, lower], [0, 1], 'k--')
-            plt.plot([upper, upper], [0, 1], 'k--')
-            plt.plot([guess[0], guess[0]], [0, 1], 'r--')
-            plt.plot([guess[1], guess[1]], [0, 1], 'r--')
-            plt.plot([Ll, Ll], [0, 1], 'g--')
-            plt.plot([Ul, Ul], [0, 1], 'g--')
-            plt.plot([Lu, Lu], [0, 1], 'g--')
-            plt.plot([Uu, Uu], [0, 1], 'g--')
-            plt.savefig('pivot.pdf')
+        upper = bisect(_rootU, grid_min, grid_max, xtol=1.e-5 * (grid_max - grid_min))
+        lower = bisect(_rootL, grid_min, grid_max, xtol=1.e-5 * (grid_max - grid_min))
 
         return lower + observed_stat, upper + observed_stat
 
@@ -778,7 +633,6 @@ class optimization_intervals(object):
 
     def _weights(self,
                  sample_stat,
-                 candidate,
                  nuisance,
                  translate_dirs):
 
@@ -802,16 +656,10 @@ class optimization_intervals(object):
         _lognum = 0
         for i, opt_info in enumerate(self.opt_sampling_info):
             opt_sampler, opt_sample = opt_info[:2]
-            if not isinstance(opt_sampler, affine_gaussian_sampler):
-                score_sample = np.multiply.outer(sample_stat + candidate, translate_dirs[i]) + nuisance[i][None,
-                                                                                               :]  # these are now score coordinates
-                _lognum += opt_sampler.log_density(score_sample, opt_sample)
-            else:
-                _lognum += opt_sampler.log_density_ray(candidate,
-                                                       translate_dirs[i],
-                                                       nuisance[i],
-                                                       sample_stat,
-                                                       opt_sample)
+            score_sample = np.multiply.outer(sample_stat, translate_dirs[i]) + nuisance[i][None,
+                                                                               :]  # these are now score coordinates
+            _lognum += opt_sampler.log_density(score_sample, opt_sample)
+
         _logratio = _lognum - self._logden
         _logratio -= _logratio.max()
 
@@ -921,65 +769,4 @@ def _solve_barrier_affine(conjugate_arg,
             step *= 2
 
     hess = np.linalg.inv(precision + barrier_hessian(current))
-    return current_value, current, hess
-
-
-def _solve_barrier_nonneg(conjugate_arg,
-                          precision,
-                          feasible_point=None,
-                          step=1,
-                          nstep=1000,
-                          tol=1.e-8):
-    scaling = np.sqrt(np.diag(precision))
-
-    if feasible_point is None:
-        feasible_point = 1. / scaling
-
-    objective = lambda u: -u.T.dot(conjugate_arg) + u.T.dot(precision).dot(u) / 2. + np.log(
-        1. + 1. / (u / scaling)).sum()
-    grad = lambda u: -conjugate_arg + precision.dot(u) + (1. / (scaling + u) - 1. / u)
-    barrier_hessian = lambda u: (-1. / ((scaling + u) ** 2.) + 1. / (u ** 2.))
-
-    current = feasible_point
-    current_value = np.inf
-
-    for itercount in range(nstep):
-        newton_step = grad(current)
-
-        # make sure proposal is feasible
-
-        count = 0
-        while True:
-            count += 1
-            proposal = current - step * newton_step
-            if np.all(proposal > 0):
-                break
-            step *= 0.5
-            if count >= 40:
-                raise ValueError('not finding a feasible point')
-
-        # make sure proposal is a descent
-
-        count = 0
-        while True:
-            proposal = current - step * newton_step
-            proposed_value = objective(proposal)
-            if proposed_value <= current_value:
-                break
-            step *= 0.5
-
-        # stop if relative decrease is small
-
-        if np.fabs(current_value - proposed_value) < tol * np.fabs(current_value):
-            current = proposal
-            current_value = proposed_value
-            break
-
-        current = proposal
-        current_value = proposed_value
-
-        if itercount % 4 == 0:
-            step *= 2
-
-    hess = np.linalg.inv(precision + np.diag(barrier_hessian(current)))
     return current_value, current, hess
