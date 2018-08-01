@@ -55,7 +55,8 @@ def test_full_targets(n=200, p=1000, signal_fac=0.5, s=5, sigma=3, rho=0.4, rand
                  cov_target_score,
                  alternatives) = full_targets(conv.loglike,
                                               conv._W,
-                                              nonzero, dispersion=dispersion)
+                                              nonzero,
+                                              dispersion=dispersion)
             else:
                 (observed_target,
                  cov_target,
@@ -123,7 +124,8 @@ def test_selected_targets(n=2000, p=200, signal_fac=1., s=5, sigma=3, rho=0.4, r
              cov_target_score,
              alternatives) = selected_targets(conv.loglike,
                                               conv._W,
-                                              nonzero, dispersion=dispersion)
+                                              nonzero, 
+                                              dispersion=dispersion)
 
             estimate, _, _, pval, intervals, _ = conv.selective_MLE(observed_target,
                                                                     cov_target,
@@ -140,7 +142,7 @@ def main(nsim=500, full=False):
     P0, PA, cover, length_int = [], [], [], []
     from statsmodels.distributions import ECDF
 
-    n, p, s = 200, 1000, 10
+    n, p, s = 500, 100, 10
 
     for i in range(nsim):
         if full:
@@ -163,4 +165,4 @@ def main(nsim=500, full=False):
             np.mean(P0), np.std(P0), np.mean(np.array(P0) < 0.1), np.mean(np.array(PA) < 0.1), np.mean(cover),
             np.mean(avg_length), 'null pvalue + power + length')
 
-main(nsim=100, full=True)
+main(nsim=100, full=False)
