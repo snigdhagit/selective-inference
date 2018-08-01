@@ -108,9 +108,7 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     X -= X.mean(0)[None, :]
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
-    true_signals = np.zeros(p, np.bool)
-    true_signals[beta != 0] = 1
-    true_set = np.asarray([u for u in range(p) if true_signals[u]])
+    true_set = np.asarray([u for u in range(p) if beta[u]!=0])
 
     if full_dispersion:
         dispersion = np.linalg.norm(y - X.dot(np.linalg.pinv(X).dot(y))) ** 2 / (n - p)
@@ -131,14 +129,13 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
-    active_LASSO_bool = np.zeros(nactive_LASSO, np.bool)
-    for z in range(nactive_LASSO):
-        active_LASSO_bool[z] = (np.in1d(active_set_LASSO[z], true_set).sum() > 0)
+    active_LASSO_bool = np.asarray([(np.in1d(active_set_LASSO[z], true_set).sum() > 0) for z in range(nactive_LASSO)], np.bool)
 
     if nactive_LASSO>0:
         rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
         Lee_target = np.linalg.pinv(X[:, active_LASSO]).dot(X.dot(beta))
         Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_LASSO, sigma_, Type=0, alpha=0.1)
+
         if (Lee_pval.shape[0] == Lee_target.shape[0]):
 
             cov_Lee, _ = coverage(Lee_intervals, Lee_pval, Lee_target)
@@ -166,9 +163,13 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         else:
             Lee_nreport = 1
             naive_nreport = 1
+            cov_Lee, length_Lee, inf_entries, power_Lee, Lee_discoveries, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0., 0.]
+            cov_naive, length_naive, power_naive, naive_discoveries, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0., 0.]
     elif nactive_LASSO == 0:
         Lee_nreport = 1
         naive_nreport = 1
+        cov_Lee, length_Lee, inf_entries, power_Lee, Lee_discoveries, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0., 0.]
+        cov_naive, length_naive, power_naive, naive_discoveries, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0., 0.]
 
     if tuning_rand == "lambda.min":
         randomized_lasso = lasso(X,
@@ -184,9 +185,7 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     signs = randomized_lasso.fit()
     nonzero = signs != 0
     active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
-    active_rand_bool = np.zeros(nonzero.sum(), np.bool)
-    for x in range(nonzero.sum()):
-        active_rand_bool[x] = (np.in1d(active_set_rand[x], true_set).sum() > 0)
+    active_rand_bool = np.asarray([(np.in1d(active_set_rand[x], true_set).sum() > 0) for x in range(nonzero.sum())], np.bool)
     sel_MLE = np.zeros(p)
     ind_est = np.zeros(p)
     randomized_lasso_est = np.zeros(p)
@@ -216,8 +215,10 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         MLE_discoveries = BHfilter(MLE_pval, q=0.1)
         power_MLE_BH = (MLE_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
         fdr_MLE_BH = (MLE_discoveries * ~active_rand_bool).sum() / float(max(MLE_discoveries.sum(), 1.))
+        bias_MLE = np.mean(MLE_estimate - target_randomized)
     else:
         MLE_nreport = 1
+        cov_MLE, length_MLE, power_MLE,  MLE_discoveries, power_MLE_BH, fdr_MLE_BH, bias_MLE= [0., 0., 0., 0., 0., 0., 0.]
 
     return np.vstack((relative_risk(sel_MLE, beta, Sigma),
                       relative_risk(ind_est, beta, Sigma),
@@ -246,7 +247,10 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                       MLE_discoveries.sum(),
                       Lee_discoveries.sum(),
                       naive_discoveries.sum(),
-                      np.mean(MLE_estimate - target_randomized)))
+                      bias_MLE,
+                      MLE_nreport,
+                      Lee_nreport,
+                      naive_nreport))
 
 
 
