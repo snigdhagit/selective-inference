@@ -143,12 +143,13 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         if (Lee_pval.shape[0] == Lee_target.shape[0]):
 
             cov_Lee, _ = coverage(Lee_intervals, Lee_pval, Lee_target)
-            inf_entries = np.isinf(Lee_intervals[:, 1] - Lee_intervals[:, 0])
-            if inf_entries.sum() == nactive_LASSO:
+            inf_entries_bool = np.isinf(Lee_intervals[:, 1] - Lee_intervals[:, 0])
+            inf_entries = np.mean(inf_entries_bool)
+            if inf_entries == 1.:
                 length_Lee = 0.
             else:
-                length_Lee = np.mean((Lee_intervals[:, 1] - Lee_intervals[:, 0])[~inf_entries])
-            power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()
+                length_Lee = np.mean((Lee_intervals[:, 1] - Lee_intervals[:, 0])[~inf_entries_bool])
+            power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()/ float((beta != 0).sum())
             Lee_discoveries = BHfilter(Lee_pval, q=0.1)
             power_Lee_BH = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_Lee_BH = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
@@ -160,18 +161,22 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
             naive_pval = ndist.cdf(post_LASSO_OLS / naive_sd)
             cov_naive, _ = coverage(naive_intervals, naive_pval, Lee_target)
             length_naive = np.mean(naive_intervals[:, 1] - naive_intervals[:, 0])
-            power_naive = ((active_LASSO_bool) * (np.logical_or((0. < naive_intervals[:, 0]), (0. > naive_intervals[:, 1])))).sum()
+            power_naive = ((active_LASSO_bool) * (np.logical_or((0. < naive_intervals[:, 0]), (0. > naive_intervals[:, 1])))).sum()/ float((beta != 0).sum())
             naive_discoveries = BHfilter(naive_pval, q=0.1)
             power_naive_BH = (naive_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_naive_BH = (naive_discoveries * ~active_LASSO_bool).sum() / float(max(naive_discoveries.sum(), 1.))
         else:
             Lee_nreport = 1
-            cov_Lee, length_Lee, inf_entries, power_Lee, Lee_discoveries, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0., 0.]
-            cov_naive, length_naive, power_naive, naive_discoveries, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0., 0.]
+            cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0.]
+            cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0.]
+            naive_discoveries = np.zeros(1)
+            Lee_discoveries = np.zeros(1)
     elif nactive_LASSO == 0:
         Lee_nreport = 1
-        cov_Lee, length_Lee, inf_entries, power_Lee, Lee_discoveries, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0., 0.]
-        cov_naive, length_naive, power_naive, naive_discoveries, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0., 0.]
+        cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0.]
+        cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH = [0., 0., 0., 0., 0.]
+        naive_discoveries =  np.zeros(1)
+        Lee_discoveries = np.zeros(1)
 
     if tuning_rand == "lambda.min":
         randomized_lasso = lasso.gaussian(X,
@@ -214,52 +219,34 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
 
         cov_MLE, _ = coverage(MLE_intervals, MLE_pval, target_randomized)
         length_MLE = np.mean(MLE_intervals[:, 1] - MLE_intervals[:, 0])
-        power_MLE = ((active_rand_bool) * (np.logical_or((0. < MLE_intervals[:, 0]), (0. > MLE_intervals[:, 1])))).sum()
+        power_MLE = ((active_rand_bool) * (np.logical_or((0. < MLE_intervals[:, 0]), (0. > MLE_intervals[:, 1])))).sum()/ float((beta != 0).sum())
         MLE_discoveries = BHfilter(MLE_pval, q=0.1)
         power_MLE_BH = (MLE_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
         fdr_MLE_BH = (MLE_discoveries * ~active_rand_bool).sum() / float(max(MLE_discoveries.sum(), 1.))
         bias_MLE = np.mean(MLE_estimate - target_randomized)
     else:
         MLE_nreport = 1
-        cov_MLE, length_MLE, power_MLE,  MLE_discoveries, power_MLE_BH, fdr_MLE_BH, bias_MLE= [0., 0., 0., 0., 0., 0., 0.]
+        cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE= [0., 0., 0., 0., 0., 0.]
+        MLE_discoveries = np.zeros(1)
 
-    print("risk so far", relative_risk(sel_MLE, beta, Sigma), sel_MLE, MLE_estimate)
-    return np.vstack((relative_risk(sel_MLE, beta, Sigma),
-                      relative_risk(ind_est, beta, Sigma),
-                      relative_risk(randomized_lasso_est, beta, Sigma),
-                      relative_risk(randomized_rel_lasso_est, beta, Sigma),
-                      relative_risk(rel_LASSO, beta, Sigma),
-                      relative_risk(glm_LASSO, beta, Sigma),
-                      nactive_LASSO,
-                      nonzero.sum(),
-                      cov_Lee,
-                      cov_naive,
-                      length_Lee,
-                      inf_entries.sum() / float(nactive_LASSO),
-                      length_naive,
-                      power_Lee / float((beta != 0).sum()),
-                      power_naive / float((beta != 0).sum()),
-                      power_Lee_BH,
-                      power_naive_BH,
-                      fdr_Lee_BH,
-                      fdr_naive_BH,
-                      Lee_discoveries.sum(),
-                      naive_discoveries.sum(),
-                      cov_MLE,
-                      length_MLE,
-                      power_MLE,
-                      power_MLE_BH,
-                      fdr_MLE_BH,
-                      MLE_discoveries.sum(),
-                      bias_MLE,
-                      MLE_nreport,
-                      Lee_nreport))
+    risks = np.vstack((relative_risk(sel_MLE, beta, Sigma),
+                       relative_risk(ind_est, beta, Sigma),
+                       relative_risk(randomized_lasso_est, beta, Sigma),
+                       relative_risk(randomized_rel_lasso_est, beta, Sigma),
+                       relative_risk(rel_LASSO, beta, Sigma),
+                       relative_risk(glm_LASSO, beta, Sigma)))
+
+    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, 0.))
+    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, 0.))
+    MLE_inf = np.vstack((cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
+    nreport = np.vstack((Lee_nreport, MLE_nreport))
+    return np.vstack((risks, naive_inf, Lee_inf, MLE_inf, nreport))
 
 if __name__ == "__main__":
 
     ndraw = 50
-    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.25
-    output_overall = np.zeros(30)
+    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.71
+    output_overall = np.zeros(35)
     risk_overall = np.zeros(6)
 
     for i in range(ndraw):
@@ -274,18 +261,17 @@ if __name__ == "__main__":
 
         output_overall += np.squeeze(output)
 
-    nMLE = output_overall[28]
-    nLee = output_overall[29]
-    nnonrand_active = output_overall[6]
-    nrand_active = output_overall[7]
+    nMLE = output_overall[33]
+    nLee = output_overall[34]
     relative_risk = np.squeeze(output_overall[0:6])/float(ndraw)
-    nonrandomized_selective_inf = np.squeeze(output_overall[8:21])/float(ndraw-nLee)
-    randomized_selective_inf = np.squeeze(output_overall[21:28])/float(ndraw-nMLE)
+    nonrandomized_naive_inf = np.squeeze(output_overall[6:15]) / float(ndraw - nLee)
+    nonrandomized_Lee_inf = np.squeeze(output_overall[15:24])/float(ndraw-nLee)
+    randomized_MLE_inf = np.squeeze(output_overall[24:33])/float(ndraw-nMLE)
 
     print("risks: sel-MLE, ind-est, rand-LASSO, rand-rel-LASSO, rel-LASSO, glm-LASSO", relative_risk)
-    print("nonrandomized naive metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_selective_inf[[1, 4, 6, 8, 10, 12]])
-    print("nonrandomized Lee metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_selective_inf[[0, 2, 3, 5, 7, 9, 11]])
-    print("randomized metrics", randomized_selective_inf)
+    print("nonrandomized naive metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_naive_inf)
+    print("nonrandomized Lee metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_Lee_inf)
+    print("randomized metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries, bias", randomized_MLE_inf)
 
 
 
