@@ -109,8 +109,8 @@ def solve_barrier_nonneg(conjugate_arg,
                          feasible_point,
                          step=1,
                          max_iter=1000,
-         		 min_iter=50,
-                         tol=1.e-8):
+         		         min_iter=50,
+                         tol=1.e-12):
 
     gradient = np.zeros_like(conjugate_arg)
     opt_variable = np.asarray(feasible_point)
@@ -135,8 +135,8 @@ def solve_barrier_affine(conjugate_arg,
                          offset,
                          step=1,
                          max_iter=1000,
-         		 min_iter=50,
-                         tol=1.e-8):
+         		         min_iter=50,
+                         tol=1.e-12):
 
     gradient = np.zeros_like(conjugate_arg)
     opt_variable = np.asarray(feasible_point)
