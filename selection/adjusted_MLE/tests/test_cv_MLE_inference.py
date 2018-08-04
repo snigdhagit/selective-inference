@@ -1,4 +1,5 @@
-import numpy as np
+import numpy as np, os, itertools
+import pandas as pd
 
 from rpy2 import robjects
 import rpy2.robjects.numpy2ri
@@ -101,7 +102,10 @@ def BHfilter(pval, q=0.2):
     return ind
 
 def relative_risk(est, truth, Sigma):
-    return (est - truth).T.dot(Sigma).dot(est - truth) / truth.T.dot(Sigma).dot(truth)
+    if (truth!=0).sum>0:
+        return (est - truth).T.dot(Sigma).dot(est - truth) / truth.T.dot(Sigma).dot(truth)
+    else:
+        return (est - truth).T.dot(Sigma).dot(est - truth)
 
 def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
                                   randomizer_scale = np.sqrt(0.25), full_dispersion = True,
@@ -238,9 +242,11 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
 
     naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, 0.))
     Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, 0.))
+    Liu_inf = np.zeros((9,1))
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
-    nreport = np.vstack((Lee_nreport, MLE_nreport))
-    return np.vstack((risks, naive_inf, Lee_inf, MLE_inf, nreport))
+    nreport = np.vstack((Lee_nreport, MLE_nreport, 0.))
+
+    return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
 def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
                               randomizer_scale = np.sqrt(0.25), full_dispersion = True,
@@ -326,7 +332,7 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     Liu_nreport = 0
 
     if nactive_Liu > 0:
-        Liu_target = beta[active_LASSO]
+        Liu_target = beta[Lasso_soln_Liu != 0]
         df = lasso_Liu.summary(level=0.90, compute_intervals=True, dispersion=dispersion)
         Liu_lower, Liu_upper, Liu_pval = np.asarray(df['lower_confidence']), \
                                          np.asarray(df['upper_confidence']), \
@@ -393,7 +399,7 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         bias_MLE = np.mean(MLE_estimate - target_randomized)
     else:
         MLE_nreport = 1
-        cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE= [0., 0., 0., 0., 0., 0.]
+        cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE = [0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
 
     risks = np.vstack((relative_risk(sel_MLE, beta, Sigma),
@@ -410,35 +416,112 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
-def main():
+def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22]),
+                target="selected", tuning_nonrand="lambda.min", tuning_rand="lambda.1se",
+                randomizing_scale = np.sqrt(0.50), ndraw = 5, outpath = None):
 
-    ndraw = 100
-    n, p, rho, s, beta_type, snr = 500, 100, 0.35, 5, 1, 0.71
-    output_overall = np.zeros(35)
+    df_selective_inference = pd.DataFrame()
+    df_risk = pd.DataFrame()
 
-    for i in range(ndraw):
-        if n > p:
-            full_dispersion = True
-        else:
-            full_dispersion = False
+    if n > p:
+        full_dispersion = True
+    else:
+        full_dispersion = False
 
-        output = comparison_cvmetrics_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
-                                               randomizer_scale = np.sqrt(0.25), full_dispersion = full_dispersion,
-                                               tuning_nonrand = "lambda.min", tuning_rand = "lambda.1se")
+    snr_list = []
+    snr_list_0 = []
+    for snr in snr_values:
+        snr_list.append(snr*np.ones(4))
+        snr_list_0.append(snr)
+        output_overall = np.zeros(45)
+        if target == "selected":
+            for i in range(ndraw):
+                output_overall += np.squeeze(comparison_cvmetrics_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
+                                                                           randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
+                                                                           tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
+        elif target == "full":
+            for i in range(ndraw):
+                output_overall += np.squeeze(comparison_cvmetrics_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
+                                                                       randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
+                                                                       tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
 
-        output_overall += np.squeeze(output)
+        nLee = output_overall[42]
+        nLiu = output_overall[43]
+        nMLE = output_overall[44]
 
-    nMLE = output_overall[33]
-    nLee = output_overall[34]
-    relative_risk = np.squeeze(output_overall[0:6])/float(ndraw)
-    nonrandomized_naive_inf = np.squeeze(output_overall[6:15]) / float(ndraw - nLee)
-    nonrandomized_Lee_inf = np.squeeze(output_overall[15:24])/float(ndraw-nLee)
-    randomized_MLE_inf = np.squeeze(output_overall[24:33])/float(ndraw-nMLE)
+        relative_risk = (output_overall[0:6] / float(ndraw)).reshape((1, 6))
+        nonrandomized_naive_inf = (output_overall[6:15] / float(ndraw - nLee)).reshape((1, 9))
+        nonrandomized_Lee_inf = (output_overall[15:24] / float(ndraw - nLee)).reshape((1, 9))
+        nonrandomized_Liu_inf = (output_overall[24:33] / float(ndraw - nLiu)).reshape((1, 9))
+        randomized_MLE_inf = (output_overall[33:42] / float(ndraw - nMLE)).reshape((1, 9))
 
-    print("risks: sel-MLE, ind-est, rand-LASSO, rand-rel-LASSO, rel-LASSO, glm-LASSO", relative_risk)
-    print("nonrandomized naive metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_naive_inf)
-    print("nonrandomized Lee metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries", nonrandomized_Lee_inf)
-    print("randomized MLE metrics- coverage, length, power, power-BH, fdr-BH, T-discoveries, bias", randomized_MLE_inf)
+        df_naive = pd.DataFrame(data=nonrandomized_naive_inf,columns=['coverage', 'length', 'prop-infty',
+                                                                      'power', 'power-BH', 'fdr-BH',
+                                                                      'tot-discoveries', 'tot-active', 'bias'])
+        df_naive['method'] = "Naive"
+        df_Lee = pd.DataFrame(data=nonrandomized_Lee_inf, columns=['coverage', 'length', 'prop-infty',
+                                                                   'power', 'power-BH', 'fdr-BH',
+                                                                   'tot-discoveries', 'tot-active','bias'])
+        df_Lee['method'] = "Lee"
+
+        if target=="selected":
+            nonrandomized_Liu_inf[nonrandomized_Liu_inf==0] = 'NaN'
+
+        df_Liu = pd.DataFrame(data=nonrandomized_Liu_inf,
+                              columns=['coverage', 'length', 'prop-infty',
+                                       'power', 'power-BH', 'fdr-BH',
+                                       'tot-discoveries', 'tot-active',
+                                       'bias'])
+        df_Liu['method'] = "Liu"
+
+        df_MLE = pd.DataFrame(data=randomized_MLE_inf, columns=['coverage', 'length', 'prop-infty',
+                                                                                'power', 'power-BH', 'fdr-BH',
+                                                                                'tot-discoveries', 'tot-active',
+                                                                                'bias'])
+        df_MLE['method'] = "MLE"
+        df_risk_metrics = pd.DataFrame(data=relative_risk, columns=['sel-MLE', 'ind-est', 'rand-LASSO','rel-rand-LASSO', 'rel-LASSO', 'LASSO'])
+
+        df_selective_inference = df_selective_inference.append(df_naive, ignore_index=True)
+        df_selective_inference = df_selective_inference.append(df_Lee, ignore_index=True)
+        df_selective_inference = df_selective_inference.append(df_Liu, ignore_index=True)
+        df_selective_inference = df_selective_inference.append(df_MLE, ignore_index=True)
+
+        df_risk = df_risk.append(df_risk_metrics, ignore_index=True)
+
+    snr_list = list(itertools.chain.from_iterable(snr_list))
+    df_selective_inference['n'] = n
+    df_selective_inference['p'] = p
+    df_selective_inference['s'] = s
+    df_selective_inference['rho'] = rho
+    df_selective_inference['beta-type'] = beta_type
+    df_selective_inference['snr'] = pd.Series(np.asarray(snr_list))
+    df_selective_inference['target'] = target
+
+    df_risk['n'] = n
+    df_risk['p'] = p
+    df_risk['s'] = s
+    df_risk['rho'] = rho
+    df_risk['beta-type'] = beta_type
+    df_risk['snr'] = pd.Series(np.asarray(snr_list_0))
+    df_risk['target'] = target
+
+    if outpath is None:
+        outpath = os.path.dirname(__file__)
+
+    outfile_inf_csv = os.path.join(outpath, "sel_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
+    outfile_risk_csv = os.path.join(outpath, "risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
+    outfile_inf_html = os.path.join(outpath, "sel_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
+    outfile_risk_html = os.path.join(outpath, "risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
+    df_selective_inference.to_csv(outfile_inf_csv, index=False)
+    df_risk.to_csv(outfile_risk_csv, index=False)
+    df_selective_inference.to_html(outfile_inf_html)
+    df_risk.to_html(outfile_risk_html)
+
+output_file()
+
+
+
+
 
 
 
