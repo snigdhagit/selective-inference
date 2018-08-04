@@ -212,6 +212,7 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                                           randomized_lasso._W,
                                           nonzero,
                                           dispersion=dispersion)
+
         MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(observed_target,
                                                                                                              cov_target,
                                                                                                              cov_target_score,
@@ -244,7 +245,7 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, 0.))
     Liu_inf = np.zeros((9,1))
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
-    nreport = np.vstack((Lee_nreport, MLE_nreport, 0.))
+    nreport = np.vstack((Lee_nreport, 0., MLE_nreport))
 
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
@@ -416,9 +417,9 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
-def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22]),
+def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22]),
                 target="selected", tuning_nonrand="lambda.min", tuning_rand="lambda.1se",
-                randomizing_scale = np.sqrt(0.50), ndraw = 5, outpath = None):
+                randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None):
 
     df_selective_inference = pd.DataFrame()
     df_risk = pd.DataFrame()
@@ -508,16 +509,16 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     if outpath is None:
         outpath = os.path.dirname(__file__)
 
-    outfile_inf_csv = os.path.join(outpath, "sel_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
-    outfile_risk_csv = os.path.join(outpath, "risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
-    outfile_inf_html = os.path.join(outpath, "sel_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
-    outfile_risk_html = os.path.join(outpath, "risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
+    outfile_inf_csv = os.path.join(outpath, "dims_" + str(n) + "_" + str(p) + "_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
+    outfile_risk_csv = os.path.join(outpath, "dims_" + str(n) + "_" + str(p) + "_risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".csv")
+    outfile_inf_html = os.path.join(outpath, "dims_" + str(n) + "_" + str(p) + "_inference_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
+    outfile_risk_html = os.path.join(outpath, "dims_" + str(n) + "_" + str(p) + "_risk_betatype" + str(beta_type) + target + "_rho_" + str(rho) + ".html")
     df_selective_inference.to_csv(outfile_inf_csv, index=False)
     df_risk.to_csv(outfile_risk_csv, index=False)
     df_selective_inference.to_html(outfile_inf_html)
     df_risk.to_html(outfile_risk_html)
 
-output_file()
+output_file(outpath='/Users/psnigdha/adjusted_MLE/n_300_p_100/')
 
 
 
