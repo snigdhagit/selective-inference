@@ -4,6 +4,8 @@ import pandas as pd
 from rpy2 import robjects
 import rpy2.robjects.numpy2ri
 rpy2.robjects.numpy2ri.activate()
+import rpy2.robjects.pandas2ri
+from rpy2.robjects.packages import importr
 
 from scipy.stats import norm as ndist
 from selection.randomized.lasso import lasso, full_targets, selected_targets, debiased_targets
@@ -31,7 +33,6 @@ def sim_xy(n, p, nval, rho=0, s=5, beta_type=2, snr=1):
 
 def selInf_R(X, y, beta, lam, sigma, Type, alpha=0.1):
     robjects.r('''
-               R.Version()
                library("selectiveInference")
                selInf = function(X, y, beta, lam, sigma, Type, alpha= 0.1){
                y = as.matrix(y)
@@ -417,9 +418,43 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
+def plotRisk(df_risk):
+    robjects.r("""
+               library("ggplot2")
+               library("magrittr")
+               library("tidyr")
+               library("reshape")
+               
+               plot_risk <- function(df_risk, outpath="/Users/psnigdha/adjusted_MLE/plots/", resolution=300, height= 7.5, width=15)
+                { 
+                   date = 1:length(unique(df_risk$snr))
+                   df = cbind(df_risk, date)
+                   p1= df %>%
+                       gather(key, value, sel.MLE, rand.LASSO, LASSO) %>%
+                       ggplot(aes(x=date, y=value, colour=key, shape=key, linetype=key)) +
+                       geom_point(size=3) +
+                       geom_line(aes(linetype=key), size=1) +
+                       ylim(0.01,1.2)+
+                       labs(y="relative risk", x = "Signal regimes: snr") +
+                       scale_x_continuous(breaks=1:length(unique(df_risk$snr)), label = sapply(df_risk$snr, toString)) +
+                       theme(legend.position="top", legend.title = element_blank())
+                       indices = sort(c(df$sel.MLE[1], df$rand.LASSO[1], df$LASSO[1]), index.return= TRUE)$ix
+                       names = c("sel-MLE", "rand-LASSO", "LASSO")
+                   p1 = p1 + scale_color_manual(labels = names[indices], values=c("#008B8B", "#104E8B","#B22222")[indices]) +
+                        scale_shape_manual(labels = names[indices], values=c(15, 17, 16)[indices]) +
+                        scale_linetype_manual(labels = names[indices], values = c(1,1,2)[indices])
+                   outfile = paste(outpath, 'risk.png', sep="")                       
+                   ggsave(outfile, plot = p1, dpi=resolution, dev='png', height=height, width=width, units="cm")}
+                """)
+
+    robjects.pandas2ri.activate()
+    r_df_risk = robjects.conversion.py2ri(df_risk)
+    R_plot = robjects.globalenv['plot_risk']
+    R_plot(r_df_risk)
+
 def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22]),
                 target="selected", tuning_nonrand="lambda.min", tuning_rand="lambda.1se",
-                randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None):
+                randomizing_scale = np.sqrt(0.50), ndraw = 10, outpath = None):
 
     df_selective_inference = pd.DataFrame()
     df_risk = pd.DataFrame()
@@ -517,6 +552,8 @@ def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     df_risk.to_csv(outfile_risk_csv, index=False)
     df_selective_inference.to_html(outfile_inf_html)
     df_risk.to_html(outfile_risk_html)
+
+    plotRisk(df_risk)
 
 output_file(outpath='/Users/psnigdha/adjusted_MLE/n_300_p_100/')
 
