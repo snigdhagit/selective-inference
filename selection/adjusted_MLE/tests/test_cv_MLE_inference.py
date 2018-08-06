@@ -133,15 +133,19 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     else:
         lam_LASSO = lam_1se
         glm_LASSO = glm_LASSO_1se
-    rel_LASSO = np.zeros(p)
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
     active_LASSO_bool = np.asarray([(np.in1d(active_set_LASSO[z], true_set).sum() > 0) for z in range(nactive_LASSO)], np.bool)
+
+    rel_LASSO = np.zeros(p)
     Lee_nreport = 0
+    bias_Lee = 0.
+    bias_naive = 0.
 
     if nactive_LASSO>0:
-        rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
+        post_LASSO_OLS = np.linalg.pinv(X[:, active_LASSO]).dot(y)
+        rel_LASSO[active_LASSO] = post_LASSO_OLS
         Lee_target = np.linalg.pinv(X[:, active_LASSO]).dot(X.dot(beta))
         Lee_intervals, Lee_pval = selInf_R(X, y, glm_LASSO, n * lam_LASSO, sigma_, Type=0, alpha=0.1)
 
@@ -154,22 +158,24 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                 length_Lee = 0.
             else:
                 length_Lee = np.mean((Lee_intervals[:, 1] - Lee_intervals[:, 0])[~inf_entries_bool])
-            power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1])))).sum()/ float((beta != 0).sum())
+            power_Lee = ((active_LASSO_bool) * (np.logical_or((0. < Lee_intervals[:, 0]), (0. > Lee_intervals[:, 1]))))\
+                            .sum()/ float((beta != 0).sum())
             Lee_discoveries = BHfilter(Lee_pval, q=0.1)
             power_Lee_BH = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_Lee_BH = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
+            bias_Lee = np.mean(glm_LASSO - Lee_target)
 
-            post_LASSO_OLS = np.linalg.pinv(X[:, active_LASSO]).dot(y)
             naive_sd = sigma_ * np.sqrt(np.diag((np.linalg.inv(X[:, active_LASSO].T.dot(X[:, active_LASSO])))))
             naive_intervals = np.vstack([post_LASSO_OLS - 1.65 * naive_sd,
                                         post_LASSO_OLS + 1.65 * naive_sd]).T
-            naive_pval = ndist.cdf(post_LASSO_OLS / naive_sd)
+            naive_pval = 2 * ndist.cdf(np.abs(post_LASSO_OLS)/ naive_sd)
             cov_naive, _ = coverage(naive_intervals, naive_pval, Lee_target)
             length_naive = np.mean(naive_intervals[:, 1] - naive_intervals[:, 0])
             power_naive = ((active_LASSO_bool) * (np.logical_or((0. < naive_intervals[:, 0]), (0. > naive_intervals[:, 1])))).sum()/ float((beta != 0).sum())
             naive_discoveries = BHfilter(naive_pval, q=0.1)
             power_naive_BH = (naive_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_naive_BH = (naive_discoveries * ~active_LASSO_bool).sum() / float(max(naive_discoveries.sum(), 1.))
+            bias_naive = np.mean(rel_LASSO - Lee_target)
         else:
             Lee_nreport = 1
             cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0.]
@@ -242,8 +248,8 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
 
-    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, 0.))
-    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, 0.))
+    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, bias_naive))
+    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, bias_Lee))
     Liu_inf = np.zeros((9,1))
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
     nreport = np.vstack((Lee_nreport, 0., MLE_nreport))
@@ -275,12 +281,16 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     else:
         lam_LASSO = lam_1se
         glm_LASSO = glm_LASSO_1se
-    rel_LASSO = np.zeros(p)
+
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
     active_LASSO_bool = np.asarray([(np.in1d(active_set_LASSO[z], true_set).sum() > 0) for z in range(nactive_LASSO)], np.bool)
+
+    rel_LASSO = np.zeros(p)
     Lee_nreport = 0
+    bias_Lee = 0.
+    bias_naive = 0.
 
     if nactive_LASSO>0:
         rel_LASSO[active_LASSO] = np.linalg.pinv(X[:, active_LASSO]).dot(y)
@@ -300,18 +310,20 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
             Lee_discoveries = BHfilter(Lee_pval, q=0.1)
             power_Lee_BH = (Lee_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_Lee_BH = (Lee_discoveries * ~active_LASSO_bool).sum() / float(max(Lee_discoveries.sum(), 1.))
+            bias_Lee = np.mean(glm_LASSO - Lee_target)
 
             post_LASSO_OLS = np.linalg.pinv(X[:, active_LASSO]).dot(y)
             naive_sd = sigma_ * np.sqrt(np.diag((np.linalg.inv(X[:, active_LASSO].T.dot(X[:, active_LASSO])))))
             naive_intervals = np.vstack([post_LASSO_OLS - 1.65 * naive_sd,
                                         post_LASSO_OLS + 1.65 * naive_sd]).T
-            naive_pval = ndist.cdf(post_LASSO_OLS / naive_sd)
+            naive_pval = 2*ndist.cdf(np.abs(post_LASSO_OLS) / naive_sd)
             cov_naive, _ = coverage(naive_intervals, naive_pval, Lee_target)
             length_naive = np.mean(naive_intervals[:, 1] - naive_intervals[:, 0])
             power_naive = ((active_LASSO_bool) * (np.logical_or((0. < naive_intervals[:, 0]), (0. > naive_intervals[:, 1])))).sum()/ float((beta != 0).sum())
             naive_discoveries = BHfilter(naive_pval, q=0.1)
             power_naive_BH = (naive_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_naive_BH = (naive_discoveries * ~active_LASSO_bool).sum() / float(max(naive_discoveries.sum(), 1.))
+            bias_naive = np.mean(rel_LASSO - Lee_target)
         else:
             Lee_nreport = 1
             cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH = [0., 0., 0., 0., 0., 0.]
@@ -411,9 +423,9 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
 
-    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, 0.))
-    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, 0.))
-    Liu_inf = np.vstack((cov_Liu, length_Liu, 0., power_Liu, power_Liu_BH, fdr_Liu_BH, Liu_discoveries.sum(), nactive_Liu, 0.))
+    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum(), nactive_LASSO, bias_naive))
+    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(), nactive_LASSO, bias_Lee))
+    Liu_inf = np.vstack((cov_Liu, length_Liu, 0., power_Liu, power_Liu_BH, fdr_Liu_BH, Liu_discoveries.sum(), nactive_Liu, bias_Lee))
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
     nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
