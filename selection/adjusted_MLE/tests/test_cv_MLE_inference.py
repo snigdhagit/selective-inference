@@ -21,7 +21,6 @@ def plotRisk(df_risk):
                library("ggplot2")
                library("magrittr")
                library("tidyr")
-               library("reshape")
                
                plot_risk <- function(df_risk, outpath="/Users/psnigdha/adjusted_MLE/plots/", resolution=300, height= 7.5, width=15)
                 { 
@@ -49,6 +48,117 @@ def plotRisk(df_risk):
     r_df_risk = robjects.conversion.py2ri(df_risk)
     R_plot = robjects.globalenv['plot_risk']
     R_plot(r_df_risk)
+
+def plotCoverageLength(df_inference):
+    robjects.r("""
+               library("ggplot2")
+               library("magrittr")
+               library("tidyr")
+               library("reshape")
+               library("cowplot")
+               library("dplyr")
+               
+               plot_coverage_lengths <- function(df_inference, outpath="/Users/psnigdha/adjusted_MLE/plots/", 
+                                                 resolution=200, height_plot1= 6.5, width_plot1=12, 
+                                                 height_plot2=13, width_plot2=13)
+               {
+                 snr.len = length(unique(df_inference$snr))
+                 df_inference = arrange(df_inference, method)
+                 target = toString(df_inference$target[1])
+                 df = data.frame(snr = sapply(unique(df_inference$snr), toString),
+                                 MLE = 100*df_inference$coverage[((2*snr.len)+1):(3*snr.len)],
+                                 Lee = 100*df_inference$coverage[1:snr.len],
+                                 Naive = 100*df_inference$coverage[((3*snr.len)+1):(4*snr.len)])
+                 if(target== "selected"){
+                     data.m <- melt(df, id.vars='snr')
+                     g1 = ggplot(data.m, aes(snr, value)) + 
+                          geom_bar(aes(fill = variable), width = 0.4, position = position_dodge(width=0.5), stat="identity") + 
+                          geom_hline(yintercept = 90, linetype="dotted") +
+                          labs(y="coverage: partial", x = "Signal regimes: snr") +
+                          theme(legend.position="top", 
+                          legend.title = element_blank()) 
+                     g1 = g1 + scale_fill_manual(labels = c("MLE-based","Lee", "Naive"), values=c("#008B8B", "#B22222", "#FF6347"))
+                } else{
+                    df = cbind(df, Liu = 100*df_inference$coverage[((snr.len)+1):(2*snr.len)])
+                    data.m <- melt(df, id.vars='snr')
+                    g1 = ggplot(data.m, aes(snr, value)) + 
+                         geom_bar(aes(fill = variable), width = 0.4, position = position_dodge(width=0.5), stat="identity") + 
+                         geom_hline(yintercept = 90, linetype="dotted") +
+                         labs(y="coverage: full", x = "Signal regimes: snr") +
+                         theme(legend.position="top", 
+                               legend.title = element_blank()) 
+                    g1 = g1 + scale_fill_manual(labels = c("MLE-based", "Lee", "Naive", "Liu"), values=c("#008B8B", "#B22222", "#FF6347", "#104E8B"))}
+  
+               outfile = paste(outpath, 'coverage.png', sep="")
+               ggsave(outfile, plot = g1, dpi=resolution, dev='png', height=height_plot1, width=width_plot1, units="cm")
+  
+               if(target== "selected"){
+                   test_data <-data.frame(MLE = filter(df_inference, method == "MLE")$length,
+                   Lee = filter(df_inference, method == "Lee")$length,
+                   Naive = filter(df_inference, method == "Naive")$length,
+                   date = 1:length(unique(df_inference$snr)))
+                   f1= test_data %>%
+                       gather(key, value, MLE, Lee, Naive) %>%
+                       ggplot(aes(x=date, y=value, colour=key, shape=key, linetype=key)) +
+                       geom_point(size=3) +
+                       geom_line(aes(linetype=key), size=1) +
+                       ylim(0.,max(test_data$MLE, test_data$Lee, test_data$Naive) + 0.2)+
+                       labs(y="lengths:partial", x = "Signal regimes: snr") +
+                       scale_x_continuous(breaks=1:length(unique(df_inference$snr)), label = sapply(unique(df_inference$snr), toString))+
+                       theme(legend.position="top", legend.title = element_blank())
+    
+               indices = sort(c(test_data$MLE[1], test_data$Lee[1], test_data$Naive[1]), decreasing = TRUE, index.return= TRUE)$ix
+               names = c("MLE-based", "Lee", "Naive")
+               f1 = f1 + scale_color_manual(labels = names[indices], values=c("#008B8B","#B22222", "#FF6347")[indices]) +
+               scale_shape_manual(labels = names[indices], values=c(15, 17, 16)[indices]) +
+               scale_linetype_manual(labels = names[indices], values = c(1,1,2)[indices])} else{
+               test_data <-data.frame(MLE = filter(df_inference, method == "MLE")$length,
+                                      Lee = filter(df_inference, method == "Lee")$length,
+                                      Naive = filter(df_inference, method == "Naive")$length,
+                                      Liu = filter(df_inference, method == "Liu")$length,
+                                      date = 1:length(unique(df_inference$snr)))
+               f1= test_data %>%
+                   gather(key, value, MLE, Lee, Naive, Liu) %>%
+                   ggplot(aes(x=date, y=value, colour=key, shape=key, linetype=key)) +
+                   geom_point(size=3) +
+                   geom_line(aes(linetype=key), size=1) +
+                   ylim(0.,max(test_data$MLE, test_data$Lee, test_data$Naive, test_data$Liu) + 0.2)+
+                   labs(y="lengths: full", x = "Signal regimes: snr") +
+                   scale_x_continuous(breaks=1:length(unique(df_inference$snr)), label = sapply(unique(df_inference$snr), toString))+
+                   theme(legend.position="top", legend.title = element_blank())
+         
+               indices = sort(c(test_data$MLE[1], test_data$Lee[1], test_data$Naive[1], test_data$Liu[1]), decreasing = TRUE, index.return= TRUE)$ix
+               names = c("MLE-based", "Lee", "Naive", "Liu")
+               f1 = f1 + scale_color_manual(labels = names[indices], values=c("#008B8B","#B22222", "#FF6347", "#104E8B")[indices]) +
+               scale_shape_manual(labels = names[indices], values=c(15, 17, 16, 15)[indices]) +
+               scale_linetype_manual(labels = names[indices], values = c(1,1,2,1)[indices])}
+  
+               prop = filter(df_inference, method == "Lee")$prop.infty
+               df = data.frame(snr = sapply(unique(df_inference$snr), toString),
+               infinite = 100*prop)
+               data.prop <- melt(df, id.vars='snr')
+               p1 = ggplot(data.prop, aes(snr, value)) +
+                    geom_bar(aes(fill = variable), width = 0.4, position = position_dodge(width=0.5), stat="identity") + 
+                    labs(y="infinite intervals (%)", x = "Signal regimes: snr") +
+                    theme(legend.position="top", 
+                    legend.title = element_blank()) 
+               p1 = p1 + scale_fill_manual(labels = c("Lee"), values=c("#B22222"))
+               prow <- plot_grid( p1 + theme(legend.position="none"),
+                                  f1 + theme(legend.position="none"),
+                                  align = 'vh',
+                                  hjust = -1,
+                                  ncol = 1)
+  
+               legend <- get_legend(f1+ theme(legend.direction = "horizontal",legend.justification="center" ,legend.box.just = "bottom"))
+               p <- plot_grid(prow, ncol=1, legend, rel_heights = c(2., .2)) 
+               outfile = paste(outpath, 'length.png', sep="")
+               ggsave(outfile, plot = p, dpi=resolution, dev='png', height=height_plot2, width=width_plot2, units="cm")}
+               """)
+
+    robjects.pandas2ri.activate()
+    r_df_inference = robjects.conversion.py2ri(df_inference)
+    R_plot = robjects.globalenv['plot_coverage_lengths']
+    R_plot(r_df_inference)
 
 def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22]),
                 target="selected", tuning_nonrand="lambda.min", tuning_rand="lambda.1se",
@@ -152,6 +262,7 @@ def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     df_risk.to_html(outfile_risk_html)
 
     plotRisk(df_risk)
+    plotCoverageLength(df_selective_inference)
 
 output_file(outpath='/Users/psnigdha/adjusted_MLE/n_300_p_100/')
 
