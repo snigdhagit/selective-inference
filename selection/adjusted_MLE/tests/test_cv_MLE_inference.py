@@ -161,7 +161,7 @@ def plotCoverageLength(df_inference):
     R_plot(r_df_inference)
 
 def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25]),
-                target="full", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
+                target="full", tuning_nonrand="lambda.theory", tuning_rand="lambda.theory",
                 randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
 
     # 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22

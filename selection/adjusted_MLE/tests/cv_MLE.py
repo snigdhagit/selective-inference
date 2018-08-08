@@ -61,28 +61,35 @@ def selInf_R(X, y, beta, lam, sigma, Type, alpha=0.1):
     return ci, pvalue
 
 
-def glmnet_lasso(X, y):
+def glmnet_lasso(X, y, lambda_val):
     robjects.r('''
                 library(glmnet)
-                glmnet_LASSO = function(X,y){
+                glmnet_LASSO = function(X,y, lambda){
                 y = as.matrix(y)
                 X = as.matrix(X)
+                lam = as.matrix(lambda)[1,1]
                 n = nrow(X)
+                
+                fit = glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
+                estimate = coef(fit, s=lam, exact=TRUE, x=X, y=y)[-1]
                 fit.cv = cv.glmnet(X, y, standardize=TRUE, intercept=FALSE, thresh=1.e-10)
                 estimate.1se = coef(fit.cv, s='lambda.1se', exact=TRUE, x=X, y=y)[-1]
                 estimate.min = coef(fit.cv, s='lambda.min', exact=TRUE, x=X, y=y)[-1]
-                return(list(estimate.1se = estimate.1se, estimate.min = estimate.min, lam.min = fit.cv$lambda.min, lam.1se = fit.cv$lambda.1se))
+                return(list(estimate = estimate, estimate.1se = estimate.1se, estimate.min = estimate.min, lam.min = fit.cv$lambda.min, lam.1se = fit.cv$lambda.1se))
                 }''')
 
     lambda_R = robjects.globalenv['glmnet_LASSO']
     n, p = X.shape
     r_X = robjects.r.matrix(X, nrow=n, ncol=p)
     r_y = robjects.r.matrix(y, nrow=n, ncol=1)
-    estimate_1se = np.array(lambda_R(r_X, r_y).rx2('estimate.1se'))
-    estimate_min = np.array(lambda_R(r_X, r_y).rx2('estimate.min'))
-    lam_min = np.asscalar(np.array(lambda_R(r_X, r_y).rx2('lam.min')))
-    lam_1se = np.asscalar(np.array(lambda_R(r_X, r_y).rx2('lam.1se')))
-    return estimate_1se, estimate_min, lam_min, lam_1se
+    r_lam = robjects.r.matrix(lambda_val, nrow=1, ncol=1)
+
+    estimate = np.array(lambda_R(r_X, r_y, r_lam).rx2('estimate'))
+    estimate_1se = np.array(lambda_R(r_X, r_y, r_lam).rx2('estimate.1se'))
+    estimate_min = np.array(lambda_R(r_X, r_y, r_lam).rx2('estimate.min'))
+    lam_min = np.asscalar(np.array(lambda_R(r_X, r_y, r_lam).rx2('lam.min')))
+    lam_1se = np.asscalar(np.array(lambda_R(r_X, r_y, r_lam).rx2('lam.1se')))
+    return estimate, estimate_1se, estimate_min, lam_min, lam_1se
 
 
 def coverage(intervals, pval, truth):
@@ -130,13 +137,17 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         sigma_ = np.std(y)
     print("estimated and true sigma", sigma, sigma_)
 
-    glm_LASSO_1se, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y)
+    lam_theory = sigma_ * 1. * np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
+    glm_LASSO_theory, glm_LASSO_1se, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y, lam_theory/float(n))
     if tuning_nonrand == "lambda.min":
         lam_LASSO = lam_min
         glm_LASSO = glm_LASSO_min
-    else:
+    elif tuning_nonrand == "lambda.1se":
         lam_LASSO = lam_1se
         glm_LASSO = glm_LASSO_1se
+    else:
+        lam_LASSO = lam_theory/float(n)
+        glm_LASSO = glm_LASSO_theory
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
@@ -202,12 +213,16 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                                           y,
                                           feature_weights=n * lam_min * np.ones(p),
                                           randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
-    else:
+    elif tuning_rand == "lambda.1se":
         randomized_lasso = lasso.gaussian(X,
                                           y,
                                           feature_weights=n * lam_1se * np.ones(p),
                                           randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
-
+    else:
+        randomized_lasso = lasso.gaussian(X,
+                                          y,
+                                          feature_weights= lam_theory * np.ones(p),
+                                          randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
     signs = randomized_lasso.fit()
     nonzero = signs != 0
     active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
@@ -293,13 +308,17 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         sigma_ = np.std(y)
     print("estimated and true sigma", sigma, sigma_)
 
-    glm_LASSO_1se, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y)
+    lam_theory = sigma_ * 1. * np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
+    glm_LASSO_theory, glm_LASSO_1se, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y, lam_theory/float(n))
     if tuning_nonrand == "lambda.min":
         lam_LASSO = lam_min
         glm_LASSO = glm_LASSO_min
-    else:
+    elif tuning_nonrand == "lambda.1se":
         lam_LASSO = lam_1se
         glm_LASSO = glm_LASSO_1se
+    else:
+        lam_LASSO = lam_theory/float(n)
+        glm_LASSO = glm_LASSO_theory
 
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
@@ -394,12 +413,16 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                                           y,
                                           feature_weights= n * lam_min * np.ones(p),
                                           randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
-    else:
+    elif tuning_rand == "lambda.1se":
         randomized_lasso = lasso.gaussian(X,
                                           y,
                                           feature_weights= n * lam_1se * np.ones(p),
                                           randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
-
+    else:
+        randomized_lasso = lasso.gaussian(X,
+                                          y,
+                                          feature_weights= lam_theory * np.ones(p),
+                                          randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
     signs = randomized_lasso.fit()
     nonzero = signs != 0
     active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
