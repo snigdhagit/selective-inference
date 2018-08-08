@@ -1,4 +1,4 @@
-import numpy as np, os, itertools
+import numpy as np, os, itertools, sys
 
 from rpy2 import robjects
 import rpy2.robjects.numpy2ri
@@ -112,9 +112,11 @@ def relative_risk(est, truth, Sigma):
 
 
 def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
-                                  randomizer_scale=np.sqrt(0.25), full_dispersion=True,
+                                  randomizer_scale=np.sqrt(0.50), full_dispersion=True,
                                   tuning_nonrand="lambda.min", tuning_rand="lambda.1se"):
+
     X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+    print("snr", snr)
     X -= X.mean(0)[None, :]
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
@@ -138,9 +140,10 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     active_LASSO = (glm_LASSO != 0)
     nactive_LASSO = active_LASSO.sum()
     active_set_LASSO = np.asarray([r for r in range(p) if active_LASSO[r]])
-    active_LASSO_bool = np.asarray([(np.in1d(active_set_LASSO[z], true_set).sum() > 0) for z in range(nactive_LASSO)],
-                                   np.bool)
+    active_LASSO_bool = np.asarray([(np.in1d(active_set_LASSO[z], true_set).sum() > 0) for z in range(nactive_LASSO)], np.bool)
+    print("active LASSO bool", active_LASSO_bool.sum())
 
+    common_report = 0.
     rel_LASSO = np.zeros(p)
     Lee_nreport = 0
     bias_Lee = 0.
@@ -198,23 +201,26 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         randomized_lasso = lasso.gaussian(X,
                                           y,
                                           feature_weights=n * lam_min * np.ones(p),
-                                          randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
+                                          randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
     else:
         randomized_lasso = lasso.gaussian(X,
                                           y,
                                           feature_weights=n * lam_1se * np.ones(p),
-                                          randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
+                                          randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
 
     signs = randomized_lasso.fit()
     nonzero = signs != 0
     active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
-    active_rand_bool = np.asarray([(np.in1d(active_set_rand[x], true_set).sum() > 0) for x in range(nonzero.sum())],
-                                  np.bool)
+    active_rand_bool = np.asarray([(np.in1d(active_set_rand[x], true_set).sum() > 0) for x in range(nonzero.sum())], np.bool)
+    print("active rand bool", active_rand_bool.sum())
     sel_MLE = np.zeros(p)
     ind_est = np.zeros(p)
     randomized_lasso_est = np.zeros(p)
     randomized_rel_lasso_est = np.zeros(p)
     MLE_nreport = 0
+
+    sys.stderr.write("active variables selected by cv LASSO  " + str(nactive_LASSO) + "\n")
+    sys.stderr.write("active variables selected by randomized LASSO " + str(nonzero.sum()) + "\n" + "\n")
 
     if nonzero.sum() > 0:
         target_randomized = np.linalg.pinv(X[:, nonzero]).dot(X.dot(beta))
@@ -226,11 +232,10 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                                           nonzero,
                                           dispersion=dispersion)
 
-        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-            observed_target,
-            cov_target,
-            cov_target_score,
-            alternatives)
+        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(observed_target,
+                                                                                                             cov_target,
+                                                                                                             cov_target_score,
+                                                                                                             alternatives)
         sel_MLE[nonzero] = MLE_estimate
         ind_est[nonzero] = ind_unbiased_estimator
         randomized_lasso_est = randomized_lasso.initial_soln
@@ -256,15 +261,17 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
 
-    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH,
-                           naive_discoveries.sum(), nactive_LASSO, bias_naive))
-    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(),
-                         nactive_LASSO, bias_Lee))
-    Liu_inf = np.zeros((9, 1))
-    MLE_inf = np.vstack(
-        (cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
-    nreport = np.vstack((Lee_nreport, 0., MLE_nreport))
+    if nactive_LASSO>0 and nonzero.sum()>0:
+        common_report += 1
 
+    naive_inf = np.vstack((cov_naive, length_naive, 0., nactive_LASSO, bias_naive, power_naive, power_naive_BH, fdr_naive_BH,
+                           naive_discoveries.sum()))
+    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, nactive_LASSO, bias_Lee, power_Lee, power_Lee_BH, fdr_Lee_BH,
+                         Lee_discoveries.sum()))
+    Liu_inf = np.zeros((9, 1))
+    MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH,
+                         MLE_discoveries.sum()))
+    nreport = np.vstack((Lee_nreport, 0., MLE_nreport, common_report))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
 
 
@@ -272,6 +279,7 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                               randomizer_scale=np.sqrt(0.25), full_dispersion=True,
                               tuning_nonrand="lambda.min", tuning_rand="lambda.1se"):
     X, y, _, _, Sigma, beta, sigma = sim_xy(n=n, p=p, nval=nval, rho=rho, s=s, beta_type=beta_type, snr=snr)
+    print("snr", snr)
     X -= X.mean(0)[None, :]
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
@@ -353,12 +361,12 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         naive_discoveries = np.zeros(1)
         Lee_discoveries = np.zeros(1)
 
-    lasso_Liu = lasso_full.gaussian(X, y, n * lam_1se)
+    lasso_Liu = lasso_full.gaussian(X, y, n * lam_LASSO)
     Lasso_soln_Liu = lasso_Liu.fit()
     active_set_Liu = np.nonzero(Lasso_soln_Liu != 0)[0]
+    print("active_set_Liu", active_set_Liu)
     nactive_Liu = active_set_Liu.shape[0]
-    active_Liu_bool = np.asarray([(np.in1d(active_set_Liu[a], true_set).sum() > 0) for a in range(nactive_Liu)],
-                                 np.bool)
+    active_Liu_bool = np.asarray([(np.in1d(active_set_Liu[a], true_set).sum() > 0) for a in range(nactive_Liu)], np.bool)
     Liu_nreport = 0
 
     if nactive_Liu > 0:
@@ -384,19 +392,19 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     if tuning_rand == "lambda.min":
         randomized_lasso = lasso.gaussian(X,
                                           y,
-                                          feature_weights=n * lam_min * np.ones(p),
+                                          feature_weights= n * lam_min * np.ones(p),
                                           randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
     else:
         randomized_lasso = lasso.gaussian(X,
                                           y,
-                                          feature_weights=n * lam_1se * np.ones(p),
-                                          randomizer_scale=np.sqrt(n) * randomizer_scale * sigma_)
+                                          feature_weights= n * lam_1se * np.ones(p),
+                                          randomizer_scale= np.sqrt(n) * randomizer_scale * sigma_)
 
     signs = randomized_lasso.fit()
     nonzero = signs != 0
     active_set_rand = np.asarray([t for t in range(p) if nonzero[t]])
-    active_rand_bool = np.asarray([(np.in1d(active_set_rand[x], true_set).sum() > 0) for x in range(nonzero.sum())],
-                                  np.bool)
+    print("active_set_rand", active_set_rand)
+    active_rand_bool = np.asarray([(np.in1d(active_set_rand[x], true_set).sum() > 0) for x in range(nonzero.sum())], np.bool)
     sel_MLE = np.zeros(p)
     ind_est = np.zeros(p)
     randomized_lasso_est = np.zeros(p)
@@ -412,11 +420,10 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                                       randomized_lasso._W,
                                       nonzero,
                                       dispersion=dispersion)
-        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-            observed_target,
-            cov_target,
-            cov_target_score,
-            alternatives)
+        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(observed_target,
+                                                                                                             cov_target,
+                                                                                                             cov_target_score,
+                                                                                                             alternatives)
         sel_MLE[nonzero] = MLE_estimate
         ind_est[nonzero] = ind_unbiased_estimator
         randomized_lasso_est = randomized_lasso.initial_soln
@@ -424,8 +431,7 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
 
         cov_MLE, _ = coverage(MLE_intervals, MLE_pval, target_randomized)
         length_MLE = np.mean(MLE_intervals[:, 1] - MLE_intervals[:, 0])
-        power_MLE = ((active_rand_bool) * (
-            np.logical_or((0. < MLE_intervals[:, 0]), (0. > MLE_intervals[:, 1])))).sum() / float((beta != 0).sum())
+        power_MLE = ((active_rand_bool) * (np.logical_or((0. < MLE_intervals[:, 0]), (0. > MLE_intervals[:, 1])))).sum() / float((beta != 0).sum())
         MLE_discoveries = BHfilter(MLE_pval, q=0.1)
         power_MLE_BH = (MLE_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
         fdr_MLE_BH = (MLE_discoveries * ~active_rand_bool).sum() / float(max(MLE_discoveries.sum(), 1.))
@@ -435,6 +441,9 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE = [0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
 
+    common_report = 0.
+    if nactive_LASSO>0 and nonzero.sum()>0 and nactive_Liu>0:
+        common_report += 1
     risks = np.vstack((relative_risk(sel_MLE, beta, Sigma),
                        relative_risk(ind_est, beta, Sigma),
                        relative_risk(randomized_lasso_est, beta, Sigma),
@@ -442,13 +451,13 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
 
-    naive_inf = np.vstack((cov_naive, length_naive, 0., power_naive, power_naive_BH, fdr_naive_BH,
-                           naive_discoveries.sum(), nactive_LASSO, bias_naive))
-    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, Lee_discoveries.sum(),
-                         nactive_LASSO, bias_Lee))
-    Liu_inf = np.vstack(
-        (cov_Liu, length_Liu, 0., power_Liu, power_Liu_BH, fdr_Liu_BH, Liu_discoveries.sum(), nactive_Liu, bias_Lee))
-    MLE_inf = np.vstack(
-        (cov_MLE, length_MLE, 0., power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), nonzero.sum(), bias_MLE))
-    nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
+    naive_inf = np.vstack((cov_naive, length_naive, 0., nactive_LASSO, bias_naive, power_naive, power_naive_BH, fdr_naive_BH,
+                           naive_discoveries.sum()))
+    Lee_inf = np.vstack((cov_Lee, length_Lee, inf_entries, nactive_LASSO, bias_Lee, power_Lee, power_Lee_BH, fdr_Lee_BH,
+                         Lee_discoveries.sum()))
+    Liu_inf = np.vstack((cov_Liu, length_Liu, 0., nactive_Liu, bias_Lee, power_Liu, power_Liu_BH, fdr_Liu_BH,
+                         Liu_discoveries.sum()))
+    MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH,
+                         MLE_discoveries.sum()))
+    nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport, common_report))
     return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))

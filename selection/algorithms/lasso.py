@@ -1888,7 +1888,7 @@ class lasso_full(lasso):
                 # relaxed Pearson's X^2 to estimate sigma
                 self._pearson_sigma = np.sqrt(
                     ((y - self.loglike.saturated_loss.mean_function(Xfeat.dot(relaxed_soln))) ** 2 / self._W).sum() / (
-                    n - len(self.active)))
+                                n - len(self.active)))
 
         else:
             self.active = []
@@ -2129,7 +2129,6 @@ class lasso_full(lasso):
         """
         loglike = glm.poisson(X, counts, quadratic=quadratic)
         return lasso_full(loglike, feature_weights)
-
 
 class lasso_full_modelQ(lasso):
     r"""
