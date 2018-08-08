@@ -161,7 +161,7 @@ def plotCoverageLength(df_inference):
     R_plot(r_df_inference)
 
 def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25]),
-                target="full", tuning_nonrand="lambda.theory", tuning_rand="lambda.theory",
+                target="full", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
                 randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
 
     # 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22
@@ -178,7 +178,7 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     for snr in snr_values:
         snr_list.append(snr*np.ones(4))
         snr_list_0.append(snr)
-        output_overall = np.zeros(46)
+        output_overall = np.zeros(49)
         if target == "selected":
             for i in range(ndraw):
                 output_overall += np.squeeze(comparison_cvmetrics_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
@@ -190,38 +190,35 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
                                                                        randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
                                                                        tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
 
-        nLee = output_overall[42]
-        nLiu = output_overall[43]
-        nMLE = output_overall[44]
-        ncommon = output_overall[45]
-
-        print("not reported", nLee, nLiu, nMLE, ncommon)
+        nLee = output_overall[46]
+        nLiu = output_overall[47]
+        nMLE = output_overall[48]
 
         relative_risk = (output_overall[0:6] / float(ndraw)).reshape((1, 6))
-        nonrandomized_naive_inf = np.hstack(((output_overall[6:11] / float(ndraw - nLee)).reshape((1, 5)),
-                                             (output_overall[11:15] / float(ndraw)).reshape((1, 4))))
-        nonrandomized_Lee_inf = np.hstack(((output_overall[15:20] / float(ndraw - nLee)).reshape((1, 5)),
-                                          (output_overall[20:24] / float(ndraw)).reshape((1, 4))))
-        nonrandomized_Liu_inf = np.hstack(((output_overall[24:29] / float(ndraw - nLiu)).reshape((1, 5)),
-                                          (output_overall[29:33] / float(ndraw)).reshape((1, 4))))
-        randomized_MLE_inf = np.hstack(((output_overall[33:38] / float(ndraw - nMLE)).reshape((1, 5)),
-                                       (output_overall[38:42] / float(ndraw)).reshape((1, 4))))
+        nonrandomized_naive_inf = np.hstack(((output_overall[6:12] / float(ndraw - nLee)).reshape((1, 6)),
+                                             (output_overall[12:16] / float(ndraw)).reshape((1, 4))))
+        nonrandomized_Lee_inf = np.hstack(((output_overall[16:22] / float(ndraw - nLee)).reshape((1, 6)),
+                                          (output_overall[22:26] / float(ndraw)).reshape((1, 4))))
+        nonrandomized_Liu_inf = np.hstack(((output_overall[26:32] / float(ndraw - nLiu)).reshape((1, 6)),
+                                          (output_overall[32:36] / float(ndraw)).reshape((1, 4))))
+        randomized_MLE_inf = np.hstack(((output_overall[36:42] / float(ndraw - nMLE)).reshape((1, 6)),
+                                       (output_overall[42:46] / float(ndraw)).reshape((1, 4))))
 
-        df_naive = pd.DataFrame(data=nonrandomized_naive_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active', 'bias',
+        df_naive = pd.DataFrame(data=nonrandomized_naive_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active', 'bias', 'sel-power',
                                                                       'power', 'power-BH', 'fdr-BH','tot-discoveries'])
         df_naive['method'] = "Naive"
-        df_Lee = pd.DataFrame(data=nonrandomized_Lee_inf, columns=['coverage', 'length', 'prop-infty','tot-active','bias',
+        df_Lee = pd.DataFrame(data=nonrandomized_Lee_inf, columns=['coverage', 'length', 'prop-infty','tot-active','bias', 'sel-power',
                                                                    'power', 'power-BH', 'fdr-BH','tot-discoveries'])
         df_Lee['method'] = "Lee"
 
         if target=="selected":
             nonrandomized_Liu_inf[nonrandomized_Liu_inf==0] = 'NaN'
 
-        df_Liu = pd.DataFrame(data=nonrandomized_Liu_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active','bias',
+        df_Liu = pd.DataFrame(data=nonrandomized_Liu_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active','bias', 'sel-power',
                                                                   'power', 'power-BH', 'fdr-BH', 'tot-discoveries'])
         df_Liu['method'] = "Liu"
 
-        df_MLE = pd.DataFrame(data=randomized_MLE_inf, columns=['coverage', 'length', 'prop-infty', 'tot-active','bias',
+        df_MLE = pd.DataFrame(data=randomized_MLE_inf, columns=['coverage', 'length', 'prop-infty', 'tot-active','bias', 'sel-power',
                                                                 'power', 'power-BH', 'fdr-BH', 'tot-discoveries'])
         df_MLE['method'] = "MLE"
         df_risk_metrics = pd.DataFrame(data=relative_risk, columns=['sel-MLE', 'ind-est', 'rand-LASSO','rel-rand-LASSO', 'rel-LASSO', 'LASSO'])
