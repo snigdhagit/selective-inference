@@ -196,9 +196,9 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         nMLE = output_overall[54]
 
         relative_risk = (output_overall[0:6] / float(ndraw)).reshape((1, 6))
-        print("risks", (output_overall[46:50] / float(ndraw-nMLE)), (output_overall[50:52] / float(ndraw - nLee)).reshape((1, 2)))
         partial_risk = np.hstack(((output_overall[46:50] / float(ndraw-nMLE)).reshape((1, 4)),
                                   (output_overall[50:52] / float(ndraw - nLee)).reshape((1, 2))))
+        
         nonrandomized_naive_inf = np.hstack(((output_overall[6:12] / float(ndraw - nLee)).reshape((1, 6)),
                                              (output_overall[12:16] / float(ndraw)).reshape((1, 4))))
         nonrandomized_Lee_inf = np.hstack(((output_overall[16:22] / float(ndraw - nLee)).reshape((1, 6)),
