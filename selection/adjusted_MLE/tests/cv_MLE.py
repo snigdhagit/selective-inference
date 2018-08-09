@@ -397,6 +397,7 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH, selective_naive_power = [0., 0., 0., 0., 0., 0.]
         naive_discoveries = np.zeros(1)
         Lee_discoveries = np.zeros(1)
+        partial_Lasso_risk, partial_relLasso_risk = [0., 0.]
 
     lasso_Liu = lasso_full.gaussian(X, y, n * lam_LASSO)
     Lasso_soln_Liu = lasso_Liu.fit()
