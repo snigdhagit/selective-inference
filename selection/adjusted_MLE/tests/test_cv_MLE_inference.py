@@ -160,8 +160,9 @@ def plotCoverageLength(df_inference):
     R_plot = robjects.globalenv['plot_coverage_lengths']
     R_plot(r_df_inference)
 
-def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25]),
-                target="full", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
+def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.05, 0.10, 0.15, 0.20, 0.25, 0.15, 0.20, 0.25,
+                                                                               0.30, 0.42, 0.71, 1.22, 2.07]),
+                target="full", tuning_nonrand="lambda.theory", tuning_rand="lambda.theory",
                 randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
 
     # 0.15, 0.20, 0.25, 0.30, 0.42, 0.71, 1.22
@@ -177,8 +178,8 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     snr_list_0 = []
     for snr in snr_values:
         snr_list.append(snr*np.ones(4))
-        snr_list_0.append(snr)
-        output_overall = np.zeros(49)
+        snr_list_0.append(snr*np.ones(2))
+        output_overall = np.zeros(55)
         if target == "selected":
             for i in range(ndraw):
                 output_overall += np.squeeze(comparison_cvmetrics_selected(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
@@ -190,11 +191,14 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
                                                                        randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
                                                                        tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
 
-        nLee = output_overall[46]
-        nLiu = output_overall[47]
-        nMLE = output_overall[48]
+        nLee = output_overall[52]
+        nLiu = output_overall[53]
+        nMLE = output_overall[54]
 
         relative_risk = (output_overall[0:6] / float(ndraw)).reshape((1, 6))
+        print("risks", (output_overall[46:50] / float(ndraw-nMLE)), (output_overall[50:52] / float(ndraw - nLee)).reshape((1, 2)))
+        partial_risk = np.hstack(((output_overall[46:50] / float(ndraw-nMLE)).reshape((1, 4)),
+                                  (output_overall[50:52] / float(ndraw - nLee)).reshape((1, 2))))
         nonrandomized_naive_inf = np.hstack(((output_overall[6:12] / float(ndraw - nLee)).reshape((1, 6)),
                                              (output_overall[12:16] / float(ndraw)).reshape((1, 4))))
         nonrandomized_Lee_inf = np.hstack(((output_overall[16:22] / float(ndraw - nLee)).reshape((1, 6)),
@@ -221,7 +225,11 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         df_MLE = pd.DataFrame(data=randomized_MLE_inf, columns=['coverage', 'length', 'prop-infty', 'tot-active','bias', 'sel-power',
                                                                 'power', 'power-BH', 'fdr-BH', 'tot-discoveries'])
         df_MLE['method'] = "MLE"
+
         df_risk_metrics = pd.DataFrame(data=relative_risk, columns=['sel-MLE', 'ind-est', 'rand-LASSO','rel-rand-LASSO', 'rel-LASSO', 'LASSO'])
+        df_risk_metrics['metric'] = "Full"
+        df_prisk_metrics = pd.DataFrame(data=partial_risk,columns=['sel-MLE', 'ind-est', 'rand-LASSO', 'rel-rand-LASSO', 'rel-LASSO','LASSO'])
+        df_prisk_metrics['metric'] = "Partial"
 
         df_selective_inference = df_selective_inference.append(df_naive, ignore_index=True)
         df_selective_inference = df_selective_inference.append(df_Lee, ignore_index=True)
@@ -229,6 +237,7 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         df_selective_inference = df_selective_inference.append(df_MLE, ignore_index=True)
 
         df_risk = df_risk.append(df_risk_metrics, ignore_index=True)
+        df_risk = df_risk.append(df_prisk_metrics, ignore_index=True)
 
     snr_list = list(itertools.chain.from_iterable(snr_list))
     df_selective_inference['n'] = n
@@ -239,6 +248,7 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     df_selective_inference['snr'] = pd.Series(np.asarray(snr_list))
     df_selective_inference['target'] = target
 
+    snr_list_0 = list(itertools.chain.from_iterable(snr_list_0))
     df_risk['n'] = n
     df_risk['p'] = p
     df_risk['s'] = s
@@ -263,7 +273,7 @@ def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         plotRisk(df_risk)
         plotCoverageLength(df_selective_inference)
 
-output_file(outpath='/Users/psnigdha/adjusted_MLE/n_500_p_100/')
+output_file(outpath='/Users/psnigdha/adjusted_MLE/n_500_p_100/lam_theory/')
 
 
 

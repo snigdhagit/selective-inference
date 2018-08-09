@@ -1,4 +1,4 @@
-import numpy as np, os, itertools, sys
+import numpy as np, sys
 
 from rpy2 import robjects
 import rpy2.robjects.numpy2ri
@@ -195,18 +195,23 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
             fdr_naive_BH = (naive_discoveries * ~active_LASSO_bool).sum() / float(max(naive_discoveries.sum(), 1.))
             bias_naive = np.mean(rel_LASSO[active_LASSO] - Lee_target)
 
+            partial_Lasso_risk = (glm_LASSO[active_LASSO]-Lee_target).T.dot(glm_LASSO[active_LASSO]-Lee_target)
+            partial_relLasso_risk = (post_LASSO_OLS - Lee_target).T.dot(post_LASSO_OLS - Lee_target)
+
         else:
             Lee_nreport = 1
             cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, selective_Lee_power = [0., 0., 0., 0., 0., 0., 0.]
             cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH, selective_naive_power = [0., 0., 0., 0., 0., 0.]
             naive_discoveries = np.zeros(1)
             Lee_discoveries = np.zeros(1)
+            partial_Lasso_risk,  partial_relLasso_risk = [0., 0.]
     elif nactive_LASSO == 0:
         Lee_nreport = 1
         cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, selective_Lee_power = [0., 0., 0., 0., 0., 0., 0.]
         cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH, selective_naive_power = [0., 0., 0., 0., 0., 0.]
         naive_discoveries = np.zeros(1)
         Lee_discoveries = np.zeros(1)
+        partial_Lasso_risk, partial_relLasso_risk = [0., 0.]
 
     if tuning_rand == "lambda.min":
         randomized_lasso = lasso.gaussian(X,
@@ -263,10 +268,16 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
         power_MLE_BH = (MLE_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
         fdr_MLE_BH = (MLE_discoveries * ~active_rand_bool).sum() / float(max(MLE_discoveries.sum(), 1.))
         bias_MLE = np.mean(MLE_estimate - target_randomized)
+
+        partial_MLE_risk = (MLE_estimate - target_randomized).T.dot(MLE_estimate - target_randomized)
+        partial_ind_risk = (ind_unbiased_estimator - target_randomized).T.dot(ind_unbiased_estimator - target_randomized)
+        partial_randLasso_risk = (randomized_lasso_est[nonzero] - target_randomized).T.dot(randomized_lasso_est[nonzero] - target_randomized)
+        partial_relrandLasso_risk = (randomized_rel_lasso_est[nonzero] - target_randomized).T.dot(randomized_rel_lasso_est[nonzero] - target_randomized)
     else:
         MLE_nreport = 1
         cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE, selective_MLE_power = [0., 0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
+        partial_MLE_risk, partial_ind_risk, partial_randLasso_risk, partial_relrandLasso_risk = [0., 0., 0., 0.]
 
     risks = np.vstack((relative_risk(sel_MLE, beta, Sigma),
                        relative_risk(ind_est, beta, Sigma),
@@ -274,6 +285,13 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
                        relative_risk(randomized_rel_lasso_est, beta, Sigma),
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
+
+    partial_risks = np.vstack((partial_MLE_risk,
+                               partial_ind_risk,
+                               partial_randLasso_risk,
+                               partial_relrandLasso_risk,
+                               partial_relLasso_risk,
+                               partial_Lasso_risk))
 
     naive_inf = np.vstack((cov_naive, length_naive, 0., nactive_LASSO, bias_naive, selective_naive_power, power_naive, power_naive_BH, fdr_naive_BH,
                            naive_discoveries.sum()))
@@ -283,7 +301,7 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, selective_MLE_power, power_MLE, power_MLE_BH, fdr_MLE_BH,
                          MLE_discoveries.sum()))
     nreport = np.vstack((Lee_nreport, 0., MLE_nreport))
-    return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
+    return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, partial_risks, nreport))
 
 
 def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20,
@@ -362,12 +380,16 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
             power_naive_BH = (naive_discoveries * active_LASSO_bool).sum() / float((beta != 0).sum())
             fdr_naive_BH = (naive_discoveries * ~active_LASSO_bool).sum() / float(max(naive_discoveries.sum(), 1.))
             bias_naive = np.mean(rel_LASSO[active_LASSO] - Lee_target)
+
+            partial_Lasso_risk = (glm_LASSO[active_LASSO] - Lee_target).T.dot(glm_LASSO[active_LASSO] - Lee_target)
+            partial_relLasso_risk = (post_LASSO_OLS - Lee_target).T.dot(post_LASSO_OLS - Lee_target)
         else:
             Lee_nreport = 1
             cov_Lee, length_Lee, inf_entries, power_Lee, power_Lee_BH, fdr_Lee_BH, selective_Lee_power = [0., 0., 0., 0., 0., 0., 0.]
             cov_naive, length_naive, power_naive, power_naive_BH, fdr_naive_BH, selective_naive_power  = [0., 0., 0., 0., 0., 0.]
             naive_discoveries = np.zeros(1)
             Lee_discoveries = np.zeros(1)
+            partial_Lasso_risk, partial_relLasso_risk = [0., 0.]
 
     elif nactive_LASSO == 0:
         Lee_nreport = 1
@@ -453,10 +475,16 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
         power_MLE_BH = (MLE_discoveries * active_rand_bool).sum() / float((beta != 0).sum())
         fdr_MLE_BH = (MLE_discoveries * ~active_rand_bool).sum() / float(max(MLE_discoveries.sum(), 1.))
         bias_MLE = np.mean(MLE_estimate - target_randomized)
+
+        partial_MLE_risk = (MLE_estimate - target_randomized).T.dot(MLE_estimate - target_randomized)
+        partial_ind_risk = (ind_unbiased_estimator - target_randomized).T.dot(ind_unbiased_estimator - target_randomized)
+        partial_randLasso_risk = (randomized_lasso_est[nonzero] - target_randomized).T.dot(randomized_lasso_est[nonzero] - target_randomized)
+        partial_relrandLasso_risk = (randomized_rel_lasso_est[nonzero] - target_randomized).T.dot(randomized_rel_lasso_est[nonzero] - target_randomized)
     else:
         MLE_nreport = 1
         cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE, selective_MLE_power = [0., 0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
+        partial_MLE_risk, partial_ind_risk, partial_randLasso_risk, partial_relrandLasso_risk = [0., 0., 0., 0.]
 
     risks = np.vstack((relative_risk(sel_MLE, beta, Sigma),
                        relative_risk(ind_est, beta, Sigma),
@@ -464,6 +492,13 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
                        relative_risk(randomized_rel_lasso_est, beta, Sigma),
                        relative_risk(rel_LASSO, beta, Sigma),
                        relative_risk(glm_LASSO, beta, Sigma)))
+
+    partial_risks = np.vstack((partial_MLE_risk,
+                               partial_ind_risk,
+                               partial_randLasso_risk,
+                               partial_relrandLasso_risk,
+                               partial_relLasso_risk,
+                               partial_Lasso_risk))
 
     naive_inf = np.vstack((cov_naive, length_naive, 0., nactive_LASSO, bias_naive, selective_naive_power,
                            power_naive, power_naive_BH, fdr_naive_BH, naive_discoveries.sum()))
@@ -474,4 +509,4 @@ def comparison_cvmetrics_full(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1
     MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, selective_MLE_power,
                          power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum()))
     nreport = np.vstack((Lee_nreport, Liu_nreport, MLE_nreport))
-    return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, nreport))
+    return np.vstack((risks, naive_inf, Lee_inf, Liu_inf, MLE_inf, partial_risks, nreport))
