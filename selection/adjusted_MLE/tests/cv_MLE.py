@@ -93,9 +93,11 @@ def glmnet_lasso(X, y, lambda_val):
 
 
 def coverage(intervals, pval, target, truth):
-    avg_power = np.mean((pval[truth != 0]) < 0.1)
-    if avg_power.size == 0.:
-        avg_power = 0
+    pval_alt = (pval[truth != 0]) < 0.1
+    if pval_alt.sum() > 0:
+        avg_power = np.mean(pval_alt)
+    else:
+        avg_power = 0.
     return np.mean((target > intervals[:, 0]) * (target < intervals[:, 1])), avg_power
 
 
