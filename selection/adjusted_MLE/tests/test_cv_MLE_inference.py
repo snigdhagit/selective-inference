@@ -7,14 +7,14 @@ rpy2.robjects.numpy2ri.activate()
 import rpy2.robjects.pandas2ri
 from rpy2.robjects.packages import importr
 
-from selection.adjusted_MLE.tests.cv_MLE import (sim_xy,
-                                                 selInf_R,
-                                                 glmnet_lasso,
-                                                 BHfilter,
-                                                 coverage,
-                                                 relative_risk,
-                                                 comparison_cvmetrics_selected,
-                                                 comparison_cvmetrics_full)
+from selection.adjusted_MLE.cv_MLE import (sim_xy,
+                                           selInf_R,
+                                           glmnet_lasso,
+                                           BHfilter,
+                                           coverage,
+                                           relative_risk,
+                                           comparison_cvmetrics_selected,
+                                           comparison_cvmetrics_full)
 
 def plotRisk(df_risk):
     robjects.r("""
