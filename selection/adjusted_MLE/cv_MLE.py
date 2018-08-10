@@ -608,7 +608,7 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
                                                                       cov_target,
                                                                       cov_target_score,
                                                                       alternatives,
-                                                                      level=0.9, compute_intervals=True, ndraw=30000)
+                                                                      level=0.9, compute_intervals=True, ndraw=50000)
         tic = time.time()
         time_sampler = tic - toc
 
