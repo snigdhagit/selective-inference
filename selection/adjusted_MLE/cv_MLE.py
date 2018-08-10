@@ -604,7 +604,11 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
         bias_MLE = np.mean(MLE_estimate - target_randomized)
 
         toc = time.time()
-        _, sampler_pval, sampler_intervals = randomized_lasso.summary(target=target, dispersion=dispersion, level=0.9, compute_intervals=True, ndraw=30000)
+        _, sampler_pval, sampler_intervals = randomized_lasso.summary(observed_target,
+                                                                      cov_target,
+                                                                      cov_target_score,
+                                                                      alternatives,
+                                                                      level=0.9, compute_intervals=True, ndraw=30000)
         tic = time.time()
         time_sampler = tic - toc
 
@@ -619,16 +623,16 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
 
     else:
         nreport += 1
-        cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE, selective_MLE_power = [0., 0., 0., 0., 0., 0., 0.]
-        cov_sampler, length_sampler, power_sampler, power_sampler_BH, fdr_sampler_BH, bias_sampler, selective_MLE_power = [0., 0., 0., 0., 0., 0., 0.]
+        cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE, selective_MLE_power, time_MLE = [0., 0., 0., 0., 0., 0., 0., 0.]
+        cov_sampler, length_sampler, power_sampler, power_sampler_BH, fdr_sampler_BH, bias_randLASSO, selective_MLE_power, time_sampler = [0., 0., 0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
         sampler_discoveries = np.zeros(1)
 
-    MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, selective_MLE_power,
-                         power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum(), time_MLE))
+    MLE_inf = np.vstack((cov_MLE, length_MLE, 0., nonzero.sum(), bias_MLE, selective_MLE_power, time_MLE,
+                         power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum()))
 
-    sampler_inf = np.vstack((cov_sampler, length_sampler, 0., nonzero.sum(), bias_randLASSO, selective_sampler_power,
-                         power_sampler, power_sampler_BH, fdr_sampler_BH, sampler_discoveries.sum(), time_sampler))
+    sampler_inf = np.vstack((cov_sampler, length_sampler, 0., nonzero.sum(), bias_randLASSO, selective_sampler_power, time_sampler,
+                         power_sampler, power_sampler_BH, fdr_sampler_BH, sampler_discoveries.sum()))
 
     return np.vstack((MLE_inf, sampler_inf, nreport))
 
