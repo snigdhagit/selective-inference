@@ -25,23 +25,24 @@ def plotRisk(df_risk):
                plot_risk <- function(df_risk, outpath="/Users/psnigdha/adjusted_MLE/plots/", resolution=300, height= 7.5, width=15)
                 { 
                    date = 1:length(unique(df_risk$snr))
+                   df_risk = filter(df_risk, metric == "Full")
                    df = cbind(df_risk, date)
-                   p1= df %>%
-                       gather(key, value, sel.MLE, rand.LASSO, LASSO) %>%
-                       ggplot(aes(x=date, y=value, colour=key, shape=key, linetype=key)) +
-                       geom_point(size=3) +
-                       geom_line(aes(linetype=key), size=1) +
-                       ylim(0.01,1.2)+
-                       labs(y="relative risk", x = "Signal regimes: snr") +
-                       scale_x_continuous(breaks=1:length(unique(df_risk$snr)), label = sapply(df_risk$snr, toString)) +
-                       theme(legend.position="top", legend.title = element_blank())
-                       indices = sort(c(df$sel.MLE[1], df$rand.LASSO[1], df$LASSO[1]), index.return= TRUE)$ix
-                       names = c("sel-MLE", "rand-LASSO", "LASSO")
-                   p1 = p1 + scale_color_manual(labels = names[indices], values=c("#008B8B", "#104E8B","#B22222")[indices]) +
-                        scale_shape_manual(labels = names[indices], values=c(15, 17, 16)[indices]) +
-                        scale_linetype_manual(labels = names[indices], values = c(1,1,2)[indices])
-                   outfile = paste(outpath, 'risk.png', sep="")                       
-                   ggsave(outfile, plot = p1, dpi=resolution, dev='png', height=height, width=width, units="cm")}
+                   risk = df %>%
+                   gather(key, value, sel.MLE, rand.LASSO, LASSO) %>%
+                   ggplot(aes(x=date, y=value, colour=key, shape=key, linetype=key)) +
+                   geom_point(size=3) +
+                   geom_line(aes(linetype=key), size=1) +
+                   ylim(0.01,1.2)+
+                   labs(y="relative risk", x = "Signal regimes: snr") +
+                   scale_x_continuous(breaks=1:length(unique(df_risk$snr)), label = sapply(df_risk$snr, toString)) +
+                   theme(legend.position="top", legend.title = element_blank())
+                   indices = sort(c("sel.MLE", "rand.LASSO", "LASSO"), index.return= TRUE)$ix
+                   names = c("sel-MLE", "rand-LASSO", "LASSO")
+                   risk = risk + scale_color_manual(labels = names[indices], values=c("#008B8B", "#104E8B","#B22222")[indices]) +
+                   scale_shape_manual(labels = names[indices], values=c(15, 17, 16)[indices]) +
+                                      scale_linetype_manual(labels = names[indices], values = c(1,1,2)[indices])
+                                      outfile = paste(outpath, 'risk.png', sep="")
+                   ggsave(outfile, plot = risk, dpi=resolution, dev='png', height=height, width=width, units="cm")}
                 """)
 
     robjects.pandas2ri.activate()
