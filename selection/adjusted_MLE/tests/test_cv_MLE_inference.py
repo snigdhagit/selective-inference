@@ -131,7 +131,7 @@ def plotCoveragePower(df_inference):
                              scale_x_continuous(breaks=1:length(unique(df_inference$snr)), label = sapply(unique(df_inference$snr), toString))+
                              theme(legend.position="top", legend.title = element_blank())
     
-                   indices = sort(c(test_data$MLE[1], test_data$Lee[1], test_data$Naive[1]), decreasing = TRUE, index.return= TRUE)$ix
+                   indices = sort(c("MLE", "Lee", "Naive"), index.return= TRUE)$ix
                    names = c("MLE-based", "Lee", "Naive")
                    lengths = lengths + scale_color_manual(labels = names[indices], values=c("#008B8B","#B22222", "#FF6347")[indices]) +
                              scale_shape_manual(labels = names[indices], values=c(15, 17, 16)[indices]) +
@@ -151,7 +151,7 @@ def plotCoveragePower(df_inference):
                             scale_x_continuous(breaks=1:length(unique(df_inference$snr)), label = sapply(unique(df_inference$snr), toString))+
                             theme(legend.position="top", legend.title = element_blank())
          
-                   indices = sort(c(test_data$MLE[1], test_data$Lee[1], test_data$Naive[1], test_data$Liu[1]), decreasing = TRUE, index.return= TRUE)$ix
+                   indices = sort(c("MLE", "Liu", "Lee", "Naive"), index.return= TRUE)$ix
                    names = c("MLE-based", "Lee", "Naive", "Liu")
                    lengths = lengths + scale_color_manual(labels = names[indices], values=c("#008B8B","#B22222", "#FF6347", "#104E8B")[indices]) +
                              scale_shape_manual(labels = names[indices], values=c(15, 17, 16, 15)[indices]) +
