@@ -624,7 +624,7 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
     else:
         nreport += 1
         cov_MLE, length_MLE, power_MLE, power_MLE_BH, fdr_MLE_BH, bias_MLE, selective_MLE_power, time_MLE = [0., 0., 0., 0., 0., 0., 0., 0.]
-        cov_sampler, length_sampler, power_sampler, power_sampler_BH, fdr_sampler_BH, bias_randLASSO, selective_MLE_power, time_sampler = [0., 0., 0., 0., 0., 0., 0., 0.]
+        cov_sampler, length_sampler, power_sampler, power_sampler_BH, fdr_sampler_BH, bias_randLASSO, selective_sampler_power, time_sampler = [0., 0., 0., 0., 0., 0., 0., 0.]
         MLE_discoveries = np.zeros(1)
         sampler_discoveries = np.zeros(1)
 
@@ -632,7 +632,7 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
                          power_MLE, power_MLE_BH, fdr_MLE_BH, MLE_discoveries.sum()))
 
     sampler_inf = np.vstack((cov_sampler, length_sampler, 0., nonzero.sum(), bias_randLASSO, selective_sampler_power, time_sampler,
-                         power_sampler, power_sampler_BH, fdr_sampler_BH, sampler_discoveries.sum()))
+                             power_sampler, power_sampler_BH, fdr_sampler_BH, sampler_discoveries.sum()))
 
     return np.vstack((MLE_inf, sampler_inf, nreport))
 
