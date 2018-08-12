@@ -1,12 +1,6 @@
 import numpy as np, os, itertools
 import pandas as pd
 
-from rpy2 import robjects
-import rpy2.robjects.numpy2ri
-rpy2.robjects.numpy2ri.activate()
-import rpy2.robjects.pandas2ri
-from rpy2.robjects.packages import importr
-
 from selection.adjusted_MLE.cv_MLE import (sim_xy,
                                            selInf_R,
                                            glmnet_lasso,
@@ -14,8 +8,9 @@ from selection.adjusted_MLE.cv_MLE import (sim_xy,
                                            coverage,
                                            compare_sampler_MLE)
 
-def output_compare_sampler_mle(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25]),
-                target="selected", tuning_rand="lambda.1se", randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None):
+def output_compare_sampler_mle(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
+                                                                                              0.35, 0.42, 0.71, 1.22, 2.07]),
+                               target="selected", tuning_rand="lambda.1se", randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None):
 
     df_selective_inference = pd.DataFrame()
 

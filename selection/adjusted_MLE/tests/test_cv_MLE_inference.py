@@ -21,6 +21,7 @@ def plotRisk(df_risk):
                library("ggplot2")
                library("magrittr")
                library("tidyr")
+               library("dplyr")
                
                plot_risk <- function(df_risk, outpath="/Users/psnigdha/adjusted_MLE/plots/", resolution=300, height= 7.5, width=15)
                 { 
@@ -186,8 +187,8 @@ def plotCoveragePower(df_inference):
 
 def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
                                                                                0.35, 0.42, 0.71, 1.22, 2.07]),
-                target="selected", tuning_nonrand="lambda.min", tuning_rand="lambda.min",
-                randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
+                target="full", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
+                randomizing_scale = np.sqrt(0.50), ndraw = 5, outpath = None, plot=True):
 
     df_selective_inference = pd.DataFrame()
     df_risk = pd.DataFrame()
@@ -296,7 +297,7 @@ def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         plotRisk(df_risk)
         plotCoveragePower(df_selective_inference)
 
-output_file(outpath='/Users/psnigdha/adjusted_MLE/n_500_p_100/lam_min/betatype_1/')
+output_file()
 
 
 
