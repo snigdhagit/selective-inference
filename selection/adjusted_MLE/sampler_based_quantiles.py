@@ -2,9 +2,12 @@ import numpy as np
 from selection.randomized.lasso import lasso, full_targets, selected_targets, debiased_targets
 from selection.tests.instance import gaussian_instance
 from selection.constraints.affine import constraints, sample_from_constraints
-from selection.randomized.query import query
+from scipy.stats import norm
+import pylab
+import matplotlib.pyplot as plt
+import scipy.stats as stats
 
-def compute_sampler_quantiles(n=500, p=100, signal_fac=1., s=5, sigma=3, rho=0.4, randomizer_scale=1, full_dispersion=True):
+def compute_sampler_quantiles(n=500, p=100, signal_fac=1.2, s=5, sigma=1., rho=0., randomizer_scale=1, full_dispersion=True):
 
     inst, const = gaussian_instance, lasso.gaussian
     signal = np.sqrt(signal_fac * 2 * np.log(p))
@@ -45,6 +48,12 @@ def compute_sampler_quantiles(n=500, p=100, signal_fac=1., s=5, sigma=3, rho=0.4
                                           nonzero,
                                           dispersion=dispersion)
 
+        true_mean = np.linalg.pinv(X[:, nonzero]).dot(X.dot(beta))
+        estimate, observed_info_mean, _, pval, intervals, _ = conv.selective_MLE(observed_target,
+                                                                                 cov_target,
+                                                                                 cov_target_score,
+                                                                                 alternatives)
+
         opt_linear, opt_offset = conv.opt_transform
         target_precision = np.linalg.inv(cov_target)
         randomizer_cov, randomizer_precision = conv.randomizer.cov_prec
@@ -54,7 +63,6 @@ def compute_sampler_quantiles(n=500, p=100, signal_fac=1., s=5, sigma=3, rho=0.4
 
         nopt = opt_linear.shape[1]
         ntarget = target_linear.shape[1]
-        print("shapes", target_linear.shape, target_offset.shape, opt_linear.shape, opt_offset.shape)
 
         implied_precision = np.zeros((ntarget + nopt, ntarget + nopt))
         implied_precision[:ntarget, :ntarget] = target_linear.T.dot(randomizer_precision).dot(target_linear) + target_precision
@@ -64,7 +72,7 @@ def compute_sampler_quantiles(n=500, p=100, signal_fac=1., s=5, sigma=3, rho=0.4
         implied_cov = np.linalg.inv(implied_precision)
 
         conditioned_value = target_offset + opt_offset
-        implied_mean = implied_cov.dot(np.hstack((target_precision.dot(beta[nonzero])-target_linear.T.dot(randomizer_precision).dot(conditioned_value),
+        implied_mean = implied_cov.dot(np.hstack((target_precision.dot(true_mean)-target_linear.T.dot(randomizer_precision).dot(conditioned_value),
                                                   -opt_linear.T.dot(randomizer_precision).dot(conditioned_value))))
 
         A_scaling = np.zeros((nopt, ntarget+nopt))
@@ -77,12 +85,38 @@ def compute_sampler_quantiles(n=500, p=100, signal_fac=1., s=5, sigma=3, rho=0.4
 
         initial_point = np.zeros(ntarget+nopt)
         initial_point[ntarget:] = conv.observed_opt_state
+
         sampler = sample_from_constraints(affine_con,
                                           initial_point,
-                                          ndraw=10000,
+                                          ndraw=500000,
                                           burnin=1000)
 
-        print("sampler", sampler.shape)
+        print("sampler", sampler.shape, sampler[:,:ntarget].shape)
+        mle_sample = []
+        for j in range(sampler.shape[0]):
+            estimate, _, _, _, _, _ = conv.selective_MLE(sampler[j,:ntarget],
+                                                         cov_target,
+                                                         cov_target_score,
+                                                         alternatives)
+            mle_sample.append(estimate)
+            print("iteration ", j)
+        mle_sample = np.asarray(mle_sample)
+        print("check", mle_sample.shape, np.mean(mle_sample, axis=0) - true_mean)
+
+        for i in range(nonzero.sum()):
+            temp = 251 + i
+            ax = plt.subplot(temp)
+            stats.probplot(mle_sample[:,i], dist="norm", plot=pylab)
+            plt.subplots_adjust(hspace=.5, wspace=.5)
+        pylab.show()
+
+        sampler_quantiles = np.vstack([np.percentile(mle_sample, 5, axis=0), np.percentile(mle_sample, 95, axis=0)])
+
+        normal_quantiles = np.vstack((norm.ppf(0.05, loc=true_mean, scale=np.sqrt(np.diag(observed_info_mean))),
+                                      norm.ppf(0.95, loc=true_mean, scale=np.sqrt(np.diag(observed_info_mean)))))
+
+        print("sampler quantiles", sampler_quantiles.T)
+        print("normal quantiles", normal_quantiles.T)
         break
 
 compute_sampler_quantiles()
