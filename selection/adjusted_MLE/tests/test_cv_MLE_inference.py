@@ -14,7 +14,8 @@ from selection.adjusted_MLE.cv_MLE import (sim_xy,
                                            coverage,
                                            relative_risk,
                                            comparison_cvmetrics_selected,
-                                           comparison_cvmetrics_full)
+                                           comparison_cvmetrics_full,
+                                           comparison_cvmetrics_debiased)
 
 def plotRisk(df_risk):
     robjects.r("""
@@ -185,10 +186,10 @@ def plotCoveragePower(df_inference):
     R_plot = robjects.globalenv['plot_coverage_lengths']
     R_plot(r_df_inference)
 
-def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
+def output_file(n=100, p=150, rho=0.35, s=10, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
                                                                                0.35, 0.42, 0.71, 1.22, 2.07]),
-                target="full", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
-                randomizing_scale = np.sqrt(0.50), ndraw = 5, outpath = None, plot=True):
+                target="debiased", tuning_nonrand="lambda.min", tuning_rand="lambda.min",
+                randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
 
     df_selective_inference = pd.DataFrame()
     df_risk = pd.DataFrame()
@@ -214,6 +215,11 @@ def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
                 output_overall += np.squeeze(comparison_cvmetrics_full(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
                                                                        randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
                                                                        tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
+        elif target == "debiased":
+            for i in range(ndraw):
+                output_overall += np.squeeze(comparison_cvmetrics_debiased(n=n, p=p, nval=n, rho=rho, s=s, beta_type=beta_type, snr=snr,
+                                                                           randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
+                                                                           tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand))
 
         nLee = output_overall[52]
         nLiu = output_overall[53]
@@ -232,15 +238,18 @@ def output_file(n=300, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
         randomized_MLE_inf = np.hstack(((output_overall[36:42] / float(ndraw - nMLE)).reshape((1, 6)),
                                        (output_overall[42:46] / float(ndraw)).reshape((1, 4))))
 
+        if target=="selected":
+            nonrandomized_Liu_inf[nonrandomized_Liu_inf==0] = 'NaN'
+        if target == "debiased":
+            nonrandomized_Liu_inf[nonrandomized_Liu_inf == 0] = 'NaN'
+            nonrandomized_Lee_inf[nonrandomized_Lee_inf == 0] = 'NaN'
+
         df_naive = pd.DataFrame(data=nonrandomized_naive_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active', 'bias', 'sel-power',
                                                                       'power', 'power-BH', 'fdr-BH','tot-discoveries'])
         df_naive['method'] = "Naive"
         df_Lee = pd.DataFrame(data=nonrandomized_Lee_inf, columns=['coverage', 'length', 'prop-infty','tot-active','bias', 'sel-power',
                                                                    'power', 'power-BH', 'fdr-BH','tot-discoveries'])
         df_Lee['method'] = "Lee"
-
-        if target=="selected":
-            nonrandomized_Liu_inf[nonrandomized_Liu_inf==0] = 'NaN'
 
         df_Liu = pd.DataFrame(data=nonrandomized_Liu_inf,columns=['coverage', 'length', 'prop-infty', 'tot-active','bias', 'sel-power',
                                                                   'power', 'power-BH', 'fdr-BH', 'tot-discoveries'])
