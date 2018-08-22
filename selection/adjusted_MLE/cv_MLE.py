@@ -127,7 +127,6 @@ def comparison_cvmetrics_selected(n=500, p=100, nval=500, rho=0.35, s=5, beta_ty
     true_mean = X.dot(beta)
     print("snr", snr)
     X -= X.mean(0)[None, :]
-    print("standard deviations", X.std(0)[None, :], (X.std(0)[None, :])* np.sqrt(n / (n - 1.)))
     X /= (X.std(0)[None, :] * np.sqrt(n / (n - 1.)))
     y = y - y.mean()
     true_set = np.asarray([u for u in range(p) if beta[u] != 0])
@@ -531,11 +530,21 @@ def comparison_cvmetrics_debiased(n=100, p=150, nval=500, rho=0.35, s=5, beta_ty
         sigma_ = np.sqrt(dispersion)
     else:
         dispersion = None
-        sigma_ = np.std(y)
-    print("estimated and true sigma", sigma, sigma_)
+        _sigma_ = np.std(y)
 
-    lam_theory = sigma_ * 1. * np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
+    lam_theory = _sigma_ * 1. * np.mean(np.fabs(np.dot(X.T, np.random.standard_normal((n, 2000)))).max(0))
     glm_LASSO_theory, glm_LASSO_1se, glm_LASSO_min, lam_min, lam_1se = glmnet_lasso(X, y, lam_theory / float(n))
+
+    if full_dispersion is False:
+        dispersion = None
+        active_min = (glm_LASSO_min != 0)
+        if active_min.sum() > 0:
+            sigma_ = np.sqrt(np.linalg.norm(y - X[:, active_min].dot(np.linalg.pinv(X[:, active_min]).dot(y))) ** 2
+                             / (n - active_min.sum()))
+        else:
+            sigma_ = _sigma_
+    print("estimated and true sigma", sigma, _sigma_, sigma_)
+
     if tuning_nonrand == "lambda.min":
         lam_LASSO = lam_min
         glm_LASSO = glm_LASSO_min
@@ -619,11 +628,10 @@ def comparison_cvmetrics_debiased(n=100, p=150, nval=500, rho=0.35, s=5, beta_ty
                                           nonzero,
                                           penalty=randomized_lasso.penalty,
                                           dispersion=dispersion)
-        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(
-            observed_target,
-            cov_target,
-            cov_target_score,
-            alternatives)
+        MLE_estimate, _, _, MLE_pval, MLE_intervals, ind_unbiased_estimator = randomized_lasso.selective_MLE(observed_target,
+                                                                                                             cov_target,
+                                                                                                             cov_target_score,
+                                                                                                             alternatives)
         sel_MLE[nonzero] = MLE_estimate
         ind_est[nonzero] = ind_unbiased_estimator
         randomized_lasso_est = randomized_lasso.initial_soln
@@ -794,7 +802,6 @@ def compare_sampler_MLE(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=
                              power_sampler, power_sampler_BH, fdr_sampler_BH, sampler_discoveries.sum()))
 
     return np.vstack((MLE_inf, sampler_inf, nreport))
-
 
 
 
