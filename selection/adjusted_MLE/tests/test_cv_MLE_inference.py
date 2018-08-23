@@ -186,9 +186,9 @@ def plotCoveragePower(df_inference):
     R_plot = robjects.globalenv['plot_coverage_lengths']
     R_plot(r_df_inference)
 
-def output_file(n=200, p=250, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30]),
-                                                                                #0.35, 0.42, 0.71, 1.22, 2.07]),
-                target="debiased", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
+def output_file(n=500, p=100, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
+                                                                               0.35, 0.42, 0.71, 1.22, 2.07]),
+                target="selected", tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
                 randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None, plot=False):
 
     df_selective_inference = pd.DataFrame()

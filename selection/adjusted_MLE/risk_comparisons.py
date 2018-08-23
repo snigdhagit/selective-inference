@@ -162,9 +162,5 @@ def risk_comparison(n=500, p=100, nval=500, rho=0.35, s=5, beta_type=1, snr=0.20
                             relative_risk(glm_LASSO, beta, Sigma)))
         print("risks so far", risks/(i+1))
 
-    return risks
+    return risks/ndraw
 
-# risk_comparison(n=200, p=250, nval=100, rho=0.35, s=5, beta_type=1, snr=0.20,
-#                 randomizer_scale= np.sqrt(0.5), full_dispersion=False,
-#                 tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
-#                 ndraw =50)

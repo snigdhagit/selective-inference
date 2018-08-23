@@ -12,8 +12,7 @@ from selection.adjusted_MLE.risk_comparisons import (sim_xy,
                                                      relative_risk,
                                                      risk_comparison)
 
-
-def output_file(n=200, p=250, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
+def output_file(n=200, p=500, rho=0.35, s=5, beta_type=1, snr_values=np.array([0.10, 0.15, 0.20, 0.25, 0.30,
                                                                                0.35, 0.42, 0.71, 1.22, 2.07]),
                 tuning_nonrand="lambda.1se", tuning_rand="lambda.1se",
                 randomizing_scale = np.sqrt(0.50), ndraw = 50, outpath = None):
@@ -31,10 +30,9 @@ def output_file(n=200, p=250, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
                                                    randomizer_scale=randomizing_scale, full_dispersion=full_dispersion,
                                                    tuning_nonrand =tuning_nonrand, tuning_rand=tuning_rand, ndraw = ndraw))
 
-        df_risk = pd.DataFrame(data=relative_risk, columns=['sel-MLE', 'ind-est', 'rand-LASSO',
-                                                            'rel-rand-LASSO', 'rel-LASSO','LASSO'])
+        df_risk = df_risk.append(pd.DataFrame(data=relative_risk.reshape((1, 6)), columns=['sel-MLE', 'ind-est', 'rand-LASSO',
+                                                                            'rel-rand-LASSO', 'rel-LASSO','LASSO']), ignore_index=True)
 
-    snr_list = list(itertools.chain.from_iterable(snr_list))
     df_risk['n'] = n
     df_risk['p'] = p
     df_risk['s'] = s
@@ -51,4 +49,4 @@ def output_file(n=200, p=250, rho=0.35, s=5, beta_type=1, snr_values=np.array([0
     df_risk.to_csv(outfile_risk_csv, index=False)
     df_risk.to_html(outfile_risk_html)
 
-output_file()
+output_file(outpath = "/Users/psnigdha/adjusted_MLE/Risks_high/Modified_estimate/")
