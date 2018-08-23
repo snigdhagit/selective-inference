@@ -658,6 +658,7 @@ class lasso(object):
 
                 group2 = ((LHS <= 0) * 
                           (RHS <= 0))  # we can ignore the other possibility since this gives a lower bound of 0
+
                 lower_bound = 0
                 if group2.sum():
                     lower_bound = max(lower_bound, np.max(ratio[group2]))
@@ -1161,7 +1162,6 @@ class data_carving(lasso):
 
         return pval
 
-
 class data_splitting(data_carving):
 
     def fit(self, solve_args={'tol': 1.e-12, 'min_its': 500}, use_full_cov=True):
@@ -1486,7 +1486,6 @@ def _data_carving_deprec(X, y,
             return zip(L.active,
                        pvalues,
                        intervals), L
-
 
 def split_model(X, 
                 y,
@@ -1935,6 +1934,7 @@ class lasso_full(lasso):
 
             for j in range(len(active_set)):
                 idx = self.active[j]
+
                 lower, upper = _truncation_interval(Qbeta_bar, 
                                                     (X, W), 
                                                     QiE[j, j], 
@@ -1942,6 +1942,7 @@ class lasso_full(lasso):
                                                     beta_barE[j],
                                                     self.feature_weights, 
                                                     wide=True)
+
                 sd = sqrt_dispersion * np.sqrt(QiE[j, j])
                 tg = TG([(-np.inf, lower), (upper, np.inf)], scale=sd)
                 pvalue = tg.cdf(beta_barE[j])
