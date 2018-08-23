@@ -263,7 +263,7 @@ class lasso(object):
             raise ValueError("alternative must be one of ['twosided', 'onesided']")
 
         result = []
-        C = self.constraints
+        C = self._constraints
         if C is not None:
             one_step = self.onestep_estimator
             for i in range(one_step.shape[0]):
@@ -656,8 +656,9 @@ class lasso(object):
                 if group1.sum():
                     upper_bound = min(upper_bound, np.min(ratio[group1]))  # necessarily these will have RHS > 0
 
-                group2 = (LHS <= 0) * (
-                RHS <= 0)  # we can ignore the other possibility since this gives a lower bound of 0
+                group2 = ((LHS <= 0) * 
+                          (RHS <= 0))  # we can ignore the other possibility since this gives a lower bound of 0
+
                 lower_bound = 0
                 if group2.sum():
                     lower_bound = max(lower_bound, np.max(ratio[group2]))
@@ -1161,8 +1162,8 @@ class data_carving(lasso):
 
         return pval
 
-
 class data_splitting(data_carving):
+
     def fit(self, solve_args={'tol': 1.e-12, 'min_its': 500}, use_full_cov=True):
 
         lasso.fit(self, solve_args=solve_args)
@@ -1268,7 +1269,8 @@ def _data_carving_deprec(X, y,
     """
 
     n, p = X.shape
-    first_stage, stage_one, stage_two = split_model(X, y,
+    first_stage, stage_one, stage_two = split_model(X, 
+                                                    y,
                                                     sigma=sigma,
                                                     lam_frac=lam_frac,
                                                     split_frac=split_frac,
@@ -1485,8 +1487,8 @@ def _data_carving_deprec(X, y,
                        pvalues,
                        intervals), L
 
-
-def split_model(X, y,
+def split_model(X, 
+                y,
                 sigma=1,
                 lam_frac=1.,
                 split_frac=0.9,
@@ -1932,8 +1934,15 @@ class lasso_full(lasso):
 
             for j in range(len(active_set)):
                 idx = self.active[j]
-                lower, upper = _truncation_interval(Qbeta_bar, (X, W), QiE[j, j], idx, beta_barE[j],
-                                                    self.feature_weights, wide=True)
+
+                lower, upper = _truncation_interval(Qbeta_bar, 
+                                                    (X, W), 
+                                                    QiE[j, j], 
+                                                    idx, 
+                                                    beta_barE[j],
+                                                    self.feature_weights, 
+                                                    wide=True)
+
                 sd = sqrt_dispersion * np.sqrt(QiE[j, j])
                 tg = TG([(-np.inf, lower), (upper, np.inf)], scale=sd)
                 pvalue = tg.cdf(beta_barE[j])
@@ -2219,8 +2228,9 @@ class lasso_full_modelQ(lasso):
 
             # Needed for finding truncation intervals
 
-            G = self._loss.smooth_objective(lasso_solution, 'grad') + self._linear_term.objective(lasso_solution,
-                                                                                                  'grad')
+            G = (self._loss.smooth_objective(lasso_solution, 'grad') + 
+                 self._linear_term.objective(lasso_solution, 'grad'))
+
             self._Qbeta_bar = self.Q.dot(lasso_solution) - G
 
             Q = self.Q
@@ -2273,8 +2283,13 @@ class lasso_full_modelQ(lasso):
 
             for j in range(len(active_set)):
                 idx = self.active[j]
-                lower, upper = _truncation_interval(Qbeta_bar, self.Q, QiE[j, j], idx, beta_barE[j],
-                                                    self.feature_weights, wide=False)
+                lower, upper = _truncation_interval(Qbeta_bar, 
+                                                    self.Q, 
+                                                    QiE[j, j], 
+                                                    idx, 
+                                                    beta_barE[j],
+                                                    self.feature_weights, 
+                                                    wide=False)
 
                 sd = sqrt_dispersion * np.sqrt(QiE[j, j])
                 tg = TG([(-np.inf, lower), (upper, np.inf)], scale=sd)

@@ -217,6 +217,8 @@ class lasso(object):
 
         cov, prec = self.randomizer.cov_prec
         opt_linear, opt_offset = self.opt_transform
+        
+        self.cond_mean, self.cond_cov = cond_mean, cond_cov
 
         if np.asarray(prec).shape in [(), (0,)]:
             cond_precision = opt_linear.T.dot(opt_linear) * prec

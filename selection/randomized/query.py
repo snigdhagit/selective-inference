@@ -79,6 +79,107 @@ class query(object):
         """
         raise NotImplementedError('abstract method -- only keyword arguments')
 
+    def summary(self,
+                observed_target, 
+                cov_target, 
+                cov_target_score, 
+                alternatives,
+                opt_sample=None,
+                target_sample=None,
+                parameter=None,
+                level=0.9,
+                ndraw=10000,
+                burnin=2000,
+                compute_intervals=False):
+        """
+        Produce p-values and confidence intervals for targets
+        of model including selected features
+        Parameters
+        ----------
+        target : one of ['selected', 'full']
+        features : np.bool
+            Binary encoding of which features to use in final
+            model and targets.
+        parameter : np.array
+            Hypothesized value for parameter -- defaults to 0.
+        level : float
+            Confidence level.
+        ndraw : int (optional)
+            Defaults to 1000.
+        burnin : int (optional)
+            Defaults to 1000.
+        compute_intervals : bool
+            Compute confidence intervals?
+        dispersion : float (optional)
+            Use a known value for dispersion, or Pearson's X^2?
+        """
+
+        if parameter is None:
+            parameter = np.zeros_like(observed_target)
+
+        if opt_sample is None:
+            opt_sample = self.sampler.sample(ndraw, burnin)
+        else:
+            ndraw = opt_sample.shape[0]
+
+        pivots = self.sampler.coefficient_pvalues(observed_target,
+                                                  cov_target,
+                                                  cov_target_score,
+                                                  parameter=parameter,
+                                                  sample=opt_sample,
+                                                  normal_sample=target_sample,
+                                                  alternatives=alternatives)
+
+        MLE_intervals = self.selective_MLE(observed_target,
+                                           cov_target,
+                                           cov_target_score)[5]
+
+        if not np.all(parameter == 0):
+            pvalues = self.sampler.coefficient_pvalues(observed_target,
+                                                       cov_target,
+                                                       cov_target_score,
+                                                       parameter=np.zeros_like(parameter),
+                                                       sample=opt_sample,
+                                                       normal_sample=target_sample,
+                                                       alternatives=alternatives)
+        else:
+            pvalues = pivots
+
+        intervals = None
+        if compute_intervals:
+
+            MLE_intervals = self.selective_MLE(observed_target,
+                                               cov_target,
+                                               cov_target_score)[4]
+
+            intervals = self.sampler.confidence_intervals(observed_target,
+                                                          cov_target,
+                                                          cov_target_score,
+                                                          sample=opt_sample,
+                                                          normal_sample=target_sample,
+                                                          initial_guess=MLE_intervals,
+                                                          level=level)
+
+        return pivots, pvalues, intervals
+
+    def selective_MLE(self,
+                      observed_target, 
+                      cov_target, 
+                      cov_target_score, 
+                      level=0.9,
+                      solve_args={'tol':1.e-12}):
+        """
+        Parameters
+        ----------
+
+        """
+        
+        return self.sampler.selective_MLE(observed_target,
+                                          cov_target,
+                                          cov_target_score,
+                                          self.observed_opt_state,
+                                          solve_args=solve_args)
+
 
 class multiple_queries(object):
     '''
@@ -198,7 +299,9 @@ class optimization_sampler(object):
                              score_cov,
                              sample_args=(),
                              sample=None,
-                             level=0.9):
+                             normal_sample=None,
+                             level=0.9,
+                             initial_guess=None):
         '''
         Parameters
         ----------
@@ -231,7 +334,7 @@ class optimization_sampler(object):
             ndraw = sample.shape[0]
 
         _intervals = optimization_intervals([(self, sample, target_cov, score_cov)],
-                                            observed_target, ndraw)
+                                            observed_target, ndraw, normal_sample=normal_sample)
 
         limits = []
 
@@ -249,6 +352,7 @@ class optimization_sampler(object):
                             parameter=None,
                             sample_args=(),
                             sample=None,
+                            normal_sample=None,
                             alternatives=None):
         '''
         Construct selective p-values
@@ -288,7 +392,7 @@ class optimization_sampler(object):
             parameter = np.zeros(observed_target.shape[0])
 
         _intervals = optimization_intervals([(self, sample, target_cov, score_cov)],
-                                            observed_target, ndraw)
+                                            observed_target, ndraw, normal_sample=normal_sample)
         pvals = []
 
         for i in range(observed_target.shape[0]):
@@ -525,8 +629,9 @@ class optimization_intervals(object):
                  opt_sampling_info,  # a sequence of (opt_sampler, opt_sample, target_cov, score_cov) objects
                  # in theory all target_cov should be about the same...
                  observed,
-                 nsample,  # how large a normal sample
-                 target_cov=None):
+                 nsample, # how large a normal sample
+                 target_cov=None,
+                 normal_sample=None):
 
         # not all opt_samples will be of the same size as nsample
         # let's repeat them as necessary
@@ -558,9 +663,12 @@ class optimization_intervals(object):
                 self.target_cov += target_cov
             self.target_cov /= len(opt_sampling_info)
 
-        self._normal_sample = np.random.multivariate_normal(mean=np.zeros(self.target_cov.shape[0]),
-                                                            cov=self.target_cov,
-                                                            size=(nsample,))
+        if normal_sample is None:
+            self._normal_sample = np.random.multivariate_normal(mean=np.zeros(self.target_cov.shape[0]), 
+                                                                cov=self.target_cov, 
+                                                                size=(nsample,))
+        else:
+            self._normal_sample = normal_sample
 
     def pivot(self,
               linear_func,
@@ -592,9 +700,10 @@ class optimization_intervals(object):
             nuisance.append(cur_nuisance)
             translate_dirs.append(cur_score_cov / target_cov)
 
-        weights = self._weights(sample_stat + candidate,  # normal sample under candidate
-                                nuisance,  # nuisance sufficient stats for each view
-                                translate_dirs)  # points will be moved like sample * score_cov
+        weights = self._weights(sample_stat,  # normal sample 
+                                candidate,    # candidate value
+                                nuisance,       # nuisance sufficient stats for each view
+                                translate_dirs) # points will be moved like sample * score_cov
 
         pivot = np.mean((sample_stat + candidate <= observed_stat) * weights) / np.mean(weights)
 
