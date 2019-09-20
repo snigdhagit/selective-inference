@@ -29,14 +29,19 @@ class projected_langevin(object):
         return self
 
     def next(self):
+        nattempt = 0
         while True:
+            
             proj_arg = (self.state
                         + 0.5 * self.stepsize * self.gradient_map(self.state)
                         + self._noise.rvs(self._shape) * self._sqrt_step)
             candidate = self.projection_map(proj_arg)
             if not np.all(np.isfinite(self.gradient_map(candidate))):
-                print(candidate, self._sqrt_step)
+                nattempt += 1
                 self._sqrt_step *= 0.8
+                self.stepsize = self._sqrt_step**2
+                if nattempt >= 30:
+                    raise ValueError('unable to find feasible step')
             else:
                 self.state[:] = candidate
                 break

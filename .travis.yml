@@ -1,7 +1,9 @@
 language: python
+dist: trusty
 python:
   - 2.7
-  - 3.3
+  - 3.4
+  - 3.5
 notifications:
   email: false
 addons:
@@ -13,29 +15,90 @@ env:
     global:
         # Maximal dependencies
         - DEPENDS="cython numpy scipy matplotlib"
+matrix:
+  include:
+    - python: 3.5
+      env:
+        - RUN_R_TESTS=1
+    - python: 2.7
+      env:
+        - RUN_R_TESTS=1
+    # Testing without matplotlib
+    - python: 2.7
+      env:
+        - DEPENDS="cython numpy scipy"
+    # Documentation doctests
+    - python: 2.7
+      env:
+        - DOC_DOC_TEST=1
+    # Setup.py install
+    - python: 2.7
+      env:
+        - INSTALL_TYPE=setup
+    - python: 2.7
+      env:
+        # Sdist install should collect all dependencies
+        - INSTALL_TYPE=sdist
+        - DEPENDS="cython numpy scipy"
+    - python: 2.7
+      env:
+        # Wheel install should collect all dependencies
+        - INSTALL_TYPE=wheel
+        - DEPENDS="cython numpy scipy"
+    - python: 2.7
+      env:
+        - INSTALL_TYPE=requirements
+        - DEPENDS=
 before_install:
   - source travis-tools/utils.sh
   - travis_before_install
   # Install regreg 
-  - python -c "import numpy; print(numpy.version.version)"
   - git clone https://github.com/jonathan-taylor/regreg.git
   - cd regreg
   - pip install -r requirements.txt
   - pip install -e .
   - cd ..
+  - sudo apt-get install software-properties-common
+  - sudo add-apt-repository -y ppa:marutter/c2d4u
+  - sudo add-apt-repository -y ppa:marutter/rrutter
+  - sudo apt-get update
+  - sudo apt-get install -y r-base r-base-dev r-cran-devtools r-cran-rcpp
+
+
 install:
   # Install selection
-  - pip install -r requirements.txt
-  - pip install -e .
+  - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then 
+      pip install  -r requirements.txt -c constraints.txt; 
+    else
+      pip install  -r requirements.txt; 
+    fi
+  - git submodule init
+  - git submodule update
+  - cd R-software
+  - git submodule init
+  - git submodule update
+  - Rscript -e "library(Rcpp); Rcpp::compileAttributes('selectiveInference')"
+  - sudo Rscript -e "install.packages(c('glmnet', 'intervals', 'adaptMCMC'), repos='http://cloud.r-project.org')"
+  - sudo R CMD INSTALL selectiveInference
+  - cd ..
+  - python -c "from statsmodels.api import PHReg"
   - travis_install $INSTALL_TYPE
+
 # command to run tests, e.g. python setup.py test
 script:
+
     - pip install nose
+    # No figure windows for mpl; quote to hide : from travis-ci yaml parsing
+    - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then 
+        pip install  -r doc-requirements.txt -c constraints.txt; 
+      else
+        pip install  -r doc-requirements.txt; 
+      fi
     # Change into an innocuous directory and find tests from installation
     - mkdir for_testing
     - cd for_testing
-    # No figure windows for mpl; quote to hide : from travis-ci yaml parsing
     - 'echo "backend : agg" > matplotlibrc'
+
     # Doctests only on platforms that have compatible fp output
     - if [ `uname` == "Darwin" ] ||
       [ "${TRAVIS_PYTHON_VERSION:0:1}" == "3" ]; then
@@ -45,6 +108,11 @@ script:
       cp ../.coveragerc .;
       COVER_ARGS="--with-coverage --cover-package selection";
       fi
-    - env USE_SMALL_SAMPLES=1 SET_SEED=1 nosetests $DOCTEST_ARGS --verbose $COVER_ARGS selection
+    - |
+      if [ "$RUN_R_TESTS" ]; then
+        nosetests -v ../selection/algorithms/tests/test_compareR.py
+      else 
+        env USE_SMALL_SAMPLES=1 USE_TEST_SEED=1 nosetests $DOCTEST_ARGS --verbose $COVER_ARGS selection
+      fi
 after_success:
     - if [ "${COVERAGE}" == "1" ]; then coveralls; fi

@@ -3,6 +3,7 @@ Module to solve sqrt-LASSO convex program using regreg.
 """
 
 import numpy as np
+from scipy import sparse
 from scipy.stats import norm as ndist, chi as chidist
 from scipy.interpolate import interp1d
 
@@ -11,6 +12,7 @@ from scipy.interpolate import interp1d
 import regreg.api as rr
 import regreg.affine as ra
 from regreg.smooth.glm import gaussian_loglike
+from regreg.affine import astransform
 
 from ..constraints.affine import (constraints as affine_constraints, 
                                   sample_from_sphere)
@@ -36,9 +38,8 @@ class sqlasso_objective(rr.smooth_atom):
                  initial=None,
                  offset=None):
 
-        X = rr.astransform(X)
         rr.smooth_atom.__init__(self,
-                                X.input_shape,
+                                rr.astransform(X).input_shape,
                                 coef=1.,
                                 offset=offset,
                                 quadratic=quadratic,
@@ -46,8 +47,20 @@ class sqlasso_objective(rr.smooth_atom):
 
         self.X = X
         self.Y = Y
+        self.data = (X, Y)
         self._sqerror = rr.squared_error(X, Y)
 
+    def get_data(self):
+        return self._X, self._Y
+
+    def set_data(self, data):
+        X, Y = data
+        self._transform = astransform(X)
+        self._X = X
+        self._is_transform = id(self._X) == id(self._transform) # i.e. astransform was a nullop
+        self._Y = Y
+
+    data = property(get_data, set_data, doc="Data for the sqrt LASSO objective.")
 
     def smooth_objective(self, x, mode='both', check_feasibility=False):
 
@@ -62,7 +75,171 @@ class sqlasso_objective(rr.smooth_atom):
         else:
             raise ValueError("mode incorrectly specified")
 
-def solve_sqrt_lasso(X, Y, weights=None, initial=None, quadratic=None, solve_args={}):
+    def hessian(self, beta):
+        """
+
+        Compute the Hessian of the loss $ \nabla^2 \ell(X\beta)$.
+
+        Parameters
+        ----------
+
+        beta : ndarray
+            Parameters.
+
+        Returns
+        -------
+
+        hess : ndarray
+            Hessian of the loss at $\beta$, defined everywhere 
+            the residual is not 0.
+
+        """
+
+        f, g = self._sqerror.smooth_objective(beta, mode='both')
+
+        if self._is_transform:
+            raise ValueError('refusing to form Hessian for arbitrary affine_transform, use an ndarray or scipy.sparse')
+
+        if not hasattr(self, "_H"):
+            X = self.data[0]            
+            if not sparse.issparse(X): # assuming it is an ndarray
+                self._H = X.T.dot(X)
+            else:
+                self._H = X.T * X
+
+        return self._H / f - np.multiply.outer(g, g) / f**3
+
+class l2norm_saturated(rr.smooth_atom):
+
+    """
+    A little wrapper so that sqrt_lasso view can be bootstrapped
+    like a glm. 
+
+    Mainly needs the saturated_loss.hessian method.
+
+    """
+
+    def __init__(self, 
+                 shape,
+                 response, 
+                 coef=1., 
+                 offset=None,
+                 quadratic=None,
+                 initial=None):
+
+        rr.smooth_atom.__init__(self,
+                                shape,
+                                offset=offset,
+                                quadratic=quadratic,
+                                initial=initial,
+                                coef=coef)
+
+        if sparse.issparse(response):
+            self.response = response.toarray().flatten()
+        else:
+            self.response = np.asarray(response)
+
+    def smooth_objective(self, natural_param, mode='both', check_feasibility=False):
+        """
+
+        Evaluate the smooth objective, computing its value, gradient or both.
+
+        Parameters
+        ----------
+
+        natural_param : ndarray
+            The current parameter values.
+
+        mode : str
+            One of ['func', 'grad', 'both']. 
+
+        check_feasibility : bool
+            If True, return `np.inf` when
+            point is not feasible, i.e. when `natural_param` is not
+            in the domain.
+
+        Returns
+        -------
+
+        If `mode` is 'func' returns just the objective value 
+        at `natural_param`, else if `mode` is 'grad' returns the gradient
+        else returns both.
+        """
+        
+        natural_param = self.apply_offset(natural_param)
+        resid = natural_param - self.response 
+
+        if mode == 'both':
+            f, g = self.scale(np.sqrt(np.sum(resid**2))), self.scale(resid / np.sqrt(np.sum(resid**2)))
+            return f, g
+        elif mode == 'grad':
+            return self.scale(resid / np.sqrt(np.sum(resid**2))) 
+        elif mode == 'func':
+            return self.scale(np.sqrt(np.sum(resid**2)))
+        else:
+            raise ValueError("mode incorrectly specified")
+            
+    # Begin loss API
+
+    def hessian(self, natural_param):
+        """
+        Hessian of the loss.
+
+        Parameters
+        ----------
+
+        natural_param : ndarray
+            Parameters where Hessian will be evaluated.
+
+        Returns
+        -------
+
+        hess : ndarray
+            A 1D-array representing the diagonal of the Hessian
+            evaluated at `natural_param`.
+        """
+        natural_param = self.apply_offset(natural_param)
+        resid = natural_param - self.response 
+
+        norm_resid = np.sqrt(np.sum(resid**2))
+        return self.scale(np.ones_like(natural_param) / norm_resid - resid**2 / norm_resid**3) # diagonal of full Hessian
+                                                                                               # used for bootstrap for randomized and setting
+                                                                                               # up score for randomized
+
+    def get_data(self):
+        return self.response
+
+    def set_data(self, data):
+        self.response = data
+
+    data = property(get_data, set_data)
+
+    def __copy__(self):
+        return l2norm_saturated(self.shape,
+                                copy(self.response),
+                                coef=self.coef, 
+                                offset=copy(self.offset),
+                                quadratic=copy(self.quadratic),
+                                initial=copy(self.coefs))
+
+    # End loss API
+
+    def mean_function(self, eta):
+        return eta
+
+def l2norm_glm(X, 
+               Y, 
+               quadratic=None, 
+               initial=None,
+               offset=None):
+    return rr.glm(X, 
+                  Y,
+                  l2norm_saturated(Y.shape, Y),
+                  quadratic=quadratic,
+                  initial=initial,
+                  offset=offset)
+
+def solve_sqrt_lasso(X, Y, weights=None, initial=None, quadratic=None, solve_args={}, force_fat=False):
     """
 
     Solve the square-root LASSO optimization problem:
@@ -96,7 +273,7 @@ def solve_sqrt_lasso(X, Y, weights=None, initial=None, quadratic=None, solve_arg
         A quadratic term added to objective function.
     """
     n, p = X.shape
-    if n > p:
+    if n > p and not force_fat:
         return solve_sqrt_lasso_skinny(X, Y, weights=weights, initial=initial, quadratic=quadratic, solve_args=solve_args)
     else:
         return solve_sqrt_lasso_fat(X, Y, weights=weights, initial=initial, quadratic=quadratic, solve_args=solve_args)
